@@ -269,7 +269,8 @@ async function bootAuth() {
     session.clerk = clerk;
     setTokenProvider(async () => (clerk.session ? clerk.session.getToken() : null));
     clerk.addListener?.(({ user }) => {
-      if (user && !session.user) { loadMe().then(() => go(parseHash().query.next || '#/')); }
+      // Only a sign-in that happens on the sign-in screen moves you; a reload stays where it is.
+      if (user && !session.user && parseHash().path === 'signin') { loadMe().then(() => go(parseHash().query.next || '#/')); }
     });
   }
   await loadMe();

@@ -173,7 +173,7 @@ export class Orchestrator {
        values ($1, $2, $3, 'hand', $4, $5, null, null)`,
       [id('vr'), run.id, probeId, JSON.stringify(probe.turns), JSON.stringify(saved)]
     );
-    const n = (await this.savedReplies(run.id)).size;
+    const n = [...(await this.savedReplies(run.id)).values()].filter((x) => x.replies).length;
     const progress = JSON.parse(run.progress || '{}');
     await this.db.query(`update runs set progress = $1 where id = $2`, [JSON.stringify({ ...progress, done: n, current: probeId }), run.id]);
     return { probeId, saved, done: n, total: progress.total };
