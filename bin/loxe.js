@@ -9,9 +9,31 @@
 //   loxe hash <sha256>               look a report hash up in the ledger
 //   loxe replay <run-id> <probe-id>  re-run one probe and compare with the recorded verdict
 //   loxe monitor <agent-id> <hours|off>  turn the sentinel on or off
-import { verifyRows } from '../src/ledger/index.js';
+import { createHash } from 'node:crypto';
 
-const BASE = (process.env.LOXE_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+// Self-contained on purpose: this file is also served at https://loxeagent.loxeai.com/cli/loxe.mjs,
+// so the offline check must not depend on the Loxe server code. Mirrors src/core + src/ledger.
+const canonicalize = (v) => {
+  if (v === null || typeof v !== 'object') return typeof v === 'number' && !Number.isFinite(v) ? 'null' : JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map((x) => (x === undefined ? 'null' : canonicalize(x))).join(',') + ']';
+  return '{' + Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + canonicalize(v[k])).join(',') + '}';
+};
+const sha256 = (s) => createHash('sha256').update(s).digest('hex');
+const GENESIS = '0'.repeat(64);
+function verifyRows(agentId, rows) {
+  let prev = GENESIS;
+  for (const [i, r] of rows.entries()) {
+    const bad = (error) => ({ valid: false, length: rows.length, error });
+    if (r.seq !== i) return bad(`seq ${r.seq}: expected ${i}`);
+    if (r.prev_hash !== prev) return bad(`seq ${r.seq}: prev_hash does not match the entry before it`);
+    if (sha256(typeof r.payload === 'string' ? r.payload : canonicalize(r.payload)) !== r.payload_hash) return bad(`seq ${r.seq}: payload does not match its hash`);
+    if (sha256(canonicalize({ agentId, seq: r.seq, prevHash: r.prev_hash, payloadHash: r.payload_hash })) !== r.entry_hash) return bad(`seq ${r.seq}: entry hash does not recompute`);
+    prev = r.entry_hash;
+  }
+  return { valid: true, length: rows.length, head: rows.length ? prev : null };
+}
+
+const BASE = (process.env.LOXE_BASE_URL || 'https://loxeagent.loxeai.com').replace(/\/$/, '');
 const KEY = process.env.LOXE_API_KEY;
 const [cmd, ...args] = process.argv.slice(2);
 const flag = (f) => args.includes(f);

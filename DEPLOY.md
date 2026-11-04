@@ -46,5 +46,5 @@ dashboard. Put the printed agent id in Loxe's `KEIKI_AGENT_ID`.
 
 ```bash
 curl $LOXE_BASE_URL/health
-LOXE_BASE_URL=... LOXE_API_KEY=lx_... npx loxe clear https://your-agent.example.com
+LOXE_BASE_URL=... LOXE_API_KEY=lx_... node loxe.mjs clear https://your-agent.example.com
 ```

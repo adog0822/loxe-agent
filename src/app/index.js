@@ -3,6 +3,7 @@
 //   /a/:id, /badge, /verify, /report, /replay   public proof surfaces (no secrets)
 //   /health, /chat, /schedules, /hooks/maritime, /sentinel/tick   machine contracts
 //   /app/*      the product UI (static files in web/)
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { id } from '../core/canonical.js';
@@ -84,6 +85,10 @@ export function createApp({ db, baseUrl }) {
 
   // ── Machine contracts ──────────────────────────────────────────────────────
   app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  // The CLI is a single dependency-free file, served from this instance (npm's "loxe" is not ours).
+  const cliSource = readFileSync(new URL('../../bin/loxe.js', import.meta.url), 'utf8').replace(/^#!.*\n/, '');
+  app.get('/cli/loxe.mjs', (c) => c.body(cliSource, 200, { 'Content-Type': 'text/javascript; charset=utf-8' }));
   app.get('/', (c) => c.redirect('/app/'));
 
   // Maritime chat contract: a read-only command surface (runs need an authenticated call).

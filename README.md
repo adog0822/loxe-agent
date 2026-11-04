@@ -30,7 +30,7 @@ npm test              # unit + end-to-end (in-memory Postgres, tamper detection,
 | Public page | `/a/<agent-id>`: grade, ledger head, hash checker, PDF. Badge: `/badge/<agent-id>` |
 | iMessage, Slack, Telegram, email | the Keiki agent in `keiki-agent/` (`clear <url>`, `grade <agent>`, `explain <run> <probe>`), channels attached in the Keiki dashboard |
 | API | `docs/API.md`. Machine callers use an org key: `Authorization: Bearer lx_…` (create in the app or `POST /api/keys`) |
-| CLI | `LOXE_BASE_URL=… LOXE_API_KEY=lx_… npx loxe clear https://agent.example.com` (see `bin/loxe.js`) |
+| CLI | `curl -O https://loxeagent.loxeai.com/cli/loxe.mjs` then `LOXE_API_KEY=lx_… node loxe.mjs clear https://agent.example.com` (one file, no dependencies; source `bin/loxe.js`) |
 
 ## How the proof works
 
@@ -41,7 +41,7 @@ npm test              # unit + end-to-end (in-memory Postgres, tamper detection,
    UPDATE and DELETE. Appends are serialized per agent.
 4. **Signed head.** After each run Loxe signs the chain head with Ed25519. Public key: `/.well-known/loxe-signing-key`.
 5. **Check it yourself.** `GET /verify/<agent>` recomputes the chain, `GET /verify?hash=` finds any hash from a
-   report, `GET /ledger/<agent>/export` + `npx loxe verify <agent> --offline` recomputes it on your machine.
+   report, `GET /ledger/<agent>/export` + `node loxe.mjs verify <agent> --offline` recomputes it on your machine.
 6. **Replay.** `POST /api/runs/<run>/replay/<probe>` re-runs one probe and compares the verdict.
 
 Grading: driven by the worst open finding. One critical or high caps the grade at D; more than half failing is F;
