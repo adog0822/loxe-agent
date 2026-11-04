@@ -120,6 +120,9 @@ export class Orchestrator {
   // messages, the owner pastes each reply back, and the same Verifier judges them. Probes that
   // need HTTP access (raw bodies, bursts, endpoint metadata) cannot be done by hand and are
   // recorded as inconclusive. Evidence and the report say the replies were supplied by hand.
+  // A grade from a handful of replies would read like a clean bill of health, so a hand test
+  // is judged only once at least this many probes have a pasted reply.
+  static MIN_HAND_REPLIES = 20;
   static handable = (p) => (p.kind || 'turns') === 'turns' && (p.turns || []).length > 0;
 
   async startHand(agent) {
@@ -146,7 +149,7 @@ export class Orchestrator {
       saved: saved.get(p.id) || null,
     }));
     const skipped = lib.probes.filter((p) => !Orchestrator.handable(p)).map((p) => ({ probeId: p.id, title: p.title }));
-    return { runId: run.id, status: run.status, steps, skipped };
+    return { runId: run.id, status: run.status, steps, skipped, minReplies: Orchestrator.MIN_HAND_REPLIES };
   }
 
   async savedReplies(runId) {
@@ -183,9 +186,12 @@ export class Orchestrator {
   async finishHand(run, agent) {
     const lib = loadLibrary(this.libraryPath);
     if (lib.hash !== run.library_hash) throw Object.assign(new Error('the probe library changed since this run started; start a new run'), { status: 409 });
+    const saved = await this.savedReplies(run.id);
+    const answered = [...saved.values()].filter((x) => x.replies).length;
+    if (answered < Orchestrator.MIN_HAND_REPLIES)
+      throw Object.assign(new Error(`paste at least ${Orchestrator.MIN_HAND_REPLIES} replies before Loxe grades a hand test (${answered} so far)`), { status: 400 });
     await this.db.query(`update runs set status = 'running' where id = $1 and status = 'awaiting_replies'`, [run.id]);
     try {
-      const saved = await this.savedReplies(run.id);
       const memory = await integration('supermemory', 'recallAgent', { orgId: agent.org_id, agentId: agent.id });
       const items = [];
       for (const probe of lib.probes) {

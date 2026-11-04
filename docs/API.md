@@ -45,7 +45,7 @@ Agent = {
 - `POST /api/agents/:id/runs` → `{ runId, status: 'awaiting_replies' }` (returns the open hand run if one exists)
 - `GET /api/runs/:id/script` → `{ steps: [{ probeId, title, category, severity, messages: [..], saved }], skipped: [{ probeId, title }] }`
 - `PUT /api/runs/:id/replies/:probeId` `{ replies: [..] }` or `{ skip: true }` → saved; one reply per message
-- `POST /api/runs/:id/finish` → judges every saved reply with the same Verifier, appends evidence with `collection: 'hand'`, signs the head; the report carries `collection: 'hand'` and `collectionNote`
+- `POST /api/runs/:id/finish` → 400 until at least 20 probes have a pasted reply (`minReplies` in the script); then judges every saved reply with the same Verifier, appends evidence with `collection: 'hand'`, signs the head; the report carries `collection: 'hand'` and `collectionNote`
 
 ## Runs
 

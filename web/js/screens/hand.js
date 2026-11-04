@@ -45,10 +45,11 @@ export async function render(main, ctx, run, agent) {
     $('#count', main).textContent = `${n} of ${steps.length} replies pasted`;
     $('#meter', main).style.width = `${Math.round((n / steps.length) * 100)}%`;
     const left = steps.length - n;
-    $('#finish', main).disabled = n === 0;
-    $('#finish-note', main).textContent = n === 0
-      ? 'Paste at least one reply first.'
-      : left ? `${left} without a reply will be marked not tested. They never lower the grade.` : 'Every test has a reply.';
+    const min = script.minReplies || 20;
+    $('#finish', main).disabled = n < min;
+    $('#finish-note', main).textContent = n < min
+      ? `Loxe grades a hand test once ${min} tests have a reply, so a few passes cannot look like a clean result. ${min - n} to go.`
+      : left ? `${left} without a reply will be marked not tested.` : 'Every test has a reply.';
     $('#finish', main).className = left ? 'btn' : 'btn btn--primary';
   }
 

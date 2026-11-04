@@ -485,8 +485,6 @@ export function createApp({ db, baseUrl }) {
     if (r.status !== 'awaiting_replies') return c.json({ error: 'this run is already judged' }, 409);
     const a = await agentRow(r.agent_id, org(c));
     if (!a) return c.json({ error: 'not found' }, 404);
-    const answered = (await db.query(`select count(*)::int as n from vendor_requests where run_id = $1 and response_body not like '%"skipped"%'`, [r.id])).rows[0].n;
-    if (!answered) return c.json({ error: 'paste at least one reply before Loxe judges the run' }, 400);
     try {
       const report = await orchestrator.finishHand(r, a);
       return c.json({ runId: r.id, grade: report.grade });
