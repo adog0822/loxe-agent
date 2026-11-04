@@ -3,7 +3,7 @@
 The trust layer for AI agents. Point Loxe at an agent endpoint (or pick a Maritime agent) and it runs a
 frozen battery of 40 deterministic probes against it, grades it A to F, writes every result to a
 hash-chained ledger, maps each finding to SOC 2 / OWASP LLM Top 10 (2025) / NIST AI RMF / ISO/IEC 42001,
-and gives you a public clearance page, a badge and a PDF. No LLM decides pass or fail.
+and gives you a public clearance page, a badge and a PDF. Every pass/fail verdict is pure code.
 
 Loxe claims "cleared against these probes on this date, verifiable here". Never "certified" or "compliant".
 
