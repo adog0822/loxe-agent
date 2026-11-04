@@ -30,7 +30,7 @@ export async function render(main, ctx) {
   main.innerHTML = String(html`
     <article class="why">
       <header class="why__hero">
-        <h1 class="h1 why__h1">Proof your AI agent is safe to let in.</h1>
+        <h1 class="h1 h1--sans why__h1">Proof your AI agent is safe to let in.</h1>
         <p class="why__line">Loxe tests any AI agent, grades it A to F, and records every result in a ledger nobody can quietly edit. Not even us.</p>
         <div class="row row--l why__cta">
           <a class="btn btn--primary btn--l" href="${signedIn ? '#/add' : '#/signin?next=%23%2Fadd'}" data-autofocus>Test my agent</a>
@@ -76,7 +76,7 @@ export async function render(main, ctx) {
       </section>
 
       <section class="why__end">
-        <h2 class="h1 why__h1">Trust in an agent becomes portable.</h2>
+        <h2 class="h1 h1--sans why__h1">Trust in an agent becomes portable.</h2>
         <p class="why__line">Clear an agent once. The proof follows it to the next buyer, the next audit and the next platform.</p>
         <a class="btn btn--primary btn--l" href="${signedIn ? '#/add' : '#/signin?next=%23%2Fadd'}">Test my agent</a>
       </section>
