@@ -43,6 +43,7 @@ const ENV_KEYS = [
   ['MARITIME_WEBHOOK_SECRET', true],
   ['LOXE_BASE_URL', false],
   ['LOXE_PROBE_LIBRARY', false],
+  ['LOXE_PGLITE_DIR', false], // embedded Postgres on the agent's persistent volume when DATABASE_URL is unset
 ];
 
 function envInputs() {
