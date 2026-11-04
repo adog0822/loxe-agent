@@ -16,6 +16,7 @@ Evidence: each probe result is an evidence object (verdict, probe id and version
 Anyone can check: GET /verify/<agent-id> recomputes the chain; GET /verify?hash=<sha256> finds one entry; GET /ledger/<agent-id>/export downloads it; "node loxe.mjs verify <agent-id> --offline" recomputes it locally. Replay re-runs one probe and compares verdicts.
 Decisions (accept exception, fix proposed, resolved) are appended to the ledger as their own entries.
 Ways in: the web app; the public page /a/<agent-id> with badge and PDF; the Keiki agent on iMessage, Slack, Telegram and email ("clear <url>", "grade <agent-id>", "explain <run-id> <probe-id>"); the REST API with an org key (Bearer lx_...); the CLI (node loxe.mjs clear <url>); Maritime agents can be picked directly and are re-cleared on every deploy; the sentinel re-runs agents on a schedule.
+Loxe works with an agent hosted anywhere (own servers, OpenAI, Vercel, LangChain, no-code builders): it only needs the URL the agent answers chat on. Maritime, Keiki and Supermemory are optional conveniences. Teams can connect Slack (alerts) and GitHub (a check that fails below a minimum grade) on the Integrations page.
 Loxe never says certified, compliant or approved. The claim is: cleared against these probes on this date, verifiable here.
 Answer in plain English, short (under 120 words unless asked for detail), concrete, no marketing words. If the question is about the user's report, use the context below and cite probe ids and control ids. If you do not know, say so.`;
 
