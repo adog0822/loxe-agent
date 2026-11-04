@@ -1,85 +1,112 @@
 // APPEND-ONLY HASH-CHAINED LEDGER
-// Every evidence object is bound to its sequence position and the previous
-// entry's hash, forming an immutable chain. Tampering with any entry
-// invalidates every subsequent hash. The ledger is stored in Postgres
-// (with an immutability trigger) and verified on read.
-import { GENESIS, entryHash, hashObject, id } from '../core/canonical.js';
+// Every entry binds (agentId, seq, prevHash, payloadHash). payloadHash is the SHA-256 of the
+// canonical JSON of the payload exactly as stored, so anyone holding the rows can recompute
+// every hash without trusting Loxe. Postgres blocks UPDATE/DELETE (migration 001 trigger);
+// appends for one agent are serialized with an advisory lock so seq never forks.
+import { GENESIS, canonicalize, entryHash, sha256, id } from '../core/canonical.js';
 
 export class Ledger {
   constructor(db) {
-    this.db = db; // pg pool or client with query()
+    this.db = db; // createDb() instance: query() + tx()
   }
 
-  // Append one evidence object to the chain for an agent.
-  // Returns the new ledger entry.
-  async append(agentId, evidence) {
-    const prev = await this._head(agentId);
-    const seq = prev ? prev.seq + 1 : 0;
-    const prevHash = prev ? prev.entry_hash : GENESIS;
-    const payloadHash = evidence.hash || hashObject(evidence);
-    const eHash = entryHash({ agentId, seq, prevHash, payloadHash });
-    const entryId = id('le');
-
-    const row = await this.db.query(
-      `INSERT INTO ledger (id, agent_id, seq, prev_hash, payload_hash, entry_hash, payload)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [entryId, agentId, seq, prevHash, payloadHash, eHash, JSON.stringify(evidence)]
-    );
-    return row.rows[0];
+  // Append one payload to the agent's chain. kind: 'evidence' | 'decision'.
+  async append(agentId, payload, { kind = 'evidence', runId = null } = {}) {
+    const body = canonicalize(payload);
+    const payloadHash = sha256(body);
+    return this.db.tx(async (t) => {
+      await t.query(`select pg_advisory_xact_lock(hashtext($1))`, [agentId]);
+      const prev = (await t.query(
+        `select seq, entry_hash from ledger where agent_id = $1 order by seq desc limit 1`,
+        [agentId]
+      )).rows[0];
+      const seq = prev ? prev.seq + 1 : 0;
+      const prevHash = prev ? prev.entry_hash : GENESIS;
+      const eHash = entryHash({ agentId, seq, prevHash, payloadHash });
+      const row = await t.query(
+        `insert into ledger (id, agent_id, seq, prev_hash, payload_hash, entry_hash, payload, kind, run_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning seq, entry_hash, payload_hash, created_at`,
+        [id('le'), agentId, seq, prevHash, payloadHash, eHash, body, kind, runId]
+      );
+      return row.rows[0];
+    });
   }
 
-  // Verify the full chain for an agent. Returns { valid, length, error? }.
+  // Recompute the whole chain. Returns { valid, length, head, error?, brokenAt? }.
   async verify(agentId) {
-    const rows = await this.db.query(
-      `SELECT seq, prev_hash, payload_hash, entry_hash, payload
-       FROM ledger WHERE agent_id = $1 ORDER BY seq ASC`,
+    const rows = (await this.db.query(
+      `select seq, prev_hash, payload_hash, entry_hash, payload from ledger where agent_id = $1 order by seq asc`,
       [agentId]
-    );
-    let expected = GENESIS;
-    for (const row of rows.rows) {
-      const computed = entryHash({
-        agentId,
-        seq: row.seq,
-        prevHash: row.prev_hash,
-        payloadHash: row.payload_hash,
-      });
-      if (computed !== row.entry_hash) {
-        return { valid: false, length: rows.rows.length, error: `seq ${row.seq}: hash mismatch` };
-      }
-      // Verify payload hash matches actual payload
-      const actualPayloadHash = hashObject(JSON.parse(row.payload));
-      if (actualPayloadHash !== row.payload_hash) {
-        return {
-          valid: false,
-          length: rows.rows.length,
-          error: `seq ${row.seq}: payload tampered`,
-        };
-      }
-      if (row.prev_hash !== expected) {
-        return { valid: false, length: rows.rows.length, error: `seq ${row.seq}: chain broken` };
-      }
-      expected = row.entry_hash;
-    }
-    return { valid: true, length: rows.rows.length };
+    )).rows;
+    return verifyRows(agentId, rows);
   }
 
-  // Get the latest entry for an agent.
-  async _head(agentId) {
-    const r = await this.db.query(
-      `SELECT seq, entry_hash FROM ledger WHERE agent_id = $1 ORDER BY seq DESC LIMIT 1`,
-      [agentId]
-    );
-    return r.rows[0] || null;
+  // Find an entry by its entry hash or payload hash (what a buyer pastes from a report).
+  async findByHash(hash) {
+    const row = (await this.db.query(
+      `select agent_id, seq, entry_hash, payload_hash, kind, run_id, created_at
+       from ledger where entry_hash = $1 or payload_hash = $1 limit 1`,
+      [hash]
+    )).rows[0];
+    if (!row) return { found: false };
+    const upTo = (await this.db.query(
+      `select seq, prev_hash, payload_hash, entry_hash, payload from ledger
+       where agent_id = $1 and seq <= $2 order by seq asc`,
+      [row.agent_id, row.seq]
+    )).rows;
+    const chain = verifyRows(row.agent_id, upTo);
+    return {
+      found: true,
+      agentId: row.agent_id,
+      seq: row.seq,
+      kind: row.kind,
+      runId: row.run_id,
+      entryHash: row.entry_hash,
+      payloadHash: row.payload_hash,
+      recordedAt: row.created_at,
+      chainValidAtEntry: chain.valid,
+    };
   }
 
-  // Get all evidence for a run.
+  async head(agentId) {
+    const r = (await this.db.query(
+      `select seq, entry_hash from ledger where agent_id = $1 order by seq desc limit 1`,
+      [agentId]
+    )).rows[0];
+    return r ? { seq: r.seq, hash: r.entry_hash, length: r.seq + 1 } : { seq: -1, hash: null, length: 0 };
+  }
+
   async entriesForRun(runId) {
-    // entries are associated via the evidence payload's runId
-    const r = await this.db.query(
-      `SELECT * FROM ledger WHERE payload->>'runId' = $1 ORDER BY seq ASC`,
+    return (await this.db.query(
+      `select seq, kind, prev_hash, payload_hash, entry_hash, payload, created_at
+       from ledger where run_id = $1 order by seq asc`,
       [runId]
-    );
-    return r.rows;
+    )).rows.map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
   }
+
+  // Full chain export for offline verification (scripts/verify-ledger.js).
+  async export(agentId) {
+    const rows = (await this.db.query(
+      `select seq, kind, prev_hash, payload_hash, entry_hash, payload, created_at
+       from ledger where agent_id = $1 order by seq asc`,
+      [agentId]
+    )).rows;
+    return { format: 'loxe-ledger/1', agentId, genesis: GENESIS, entries: rows };
+  }
+}
+
+// Pure chain check, shared by the server and the offline verifier.
+export function verifyRows(agentId, rows) {
+  let expectedPrev = GENESIS;
+  for (const [i, row] of rows.entries()) {
+    const fail = (error) => ({ valid: false, length: rows.length, head: null, brokenAt: row.seq, error });
+    if (row.seq !== i) return fail(`seq ${row.seq}: expected seq ${i} (entry missing or reordered)`);
+    if (row.prev_hash !== expectedPrev) return fail(`seq ${row.seq}: prev_hash does not match the entry before it`);
+    const body = typeof row.payload === 'string' ? row.payload : canonicalize(row.payload);
+    if (sha256(body) !== row.payload_hash) return fail(`seq ${row.seq}: payload does not match its hash`);
+    const computed = entryHash({ agentId, seq: row.seq, prevHash: row.prev_hash, payloadHash: row.payload_hash });
+    if (computed !== row.entry_hash) return fail(`seq ${row.seq}: entry hash does not recompute`);
+    expectedPrev = row.entry_hash;
+  }
+  return { valid: true, length: rows.length, head: rows.length ? rows[rows.length - 1].entry_hash : null };
 }

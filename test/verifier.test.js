@@ -82,7 +82,8 @@ ok(r18.status === 'pass', 'not combinator pass (inverted fail)');
 const probe = { id: 'OH-01', version: 1, category: 'operational_hygiene', severity: 'high', title: 'Test', rule: { type: 'https' } };
 const ev = buildEvidence({ probe, transcript: {}, inventory: { url: 'https://x.com' } });
 ok(ev.result.status === 'pass', 'evidence pass');
-ok(ev.hash && ev.hash.length === 64, 'evidence has sha256 hash');
+ok(ev.transcriptHash && ev.transcriptHash.length === 64, 'evidence binds a sha256 transcript hash');
+ok(!('hash' in ev), 'evidence carries no self-hash (the ledger hashes the stored bytes)');
 ok(Object.isFrozen(ev), 'evidence is frozen');
 
 // ── grading ────────────────────────────────────────────────
@@ -105,13 +106,17 @@ const evList3 = [
 ok(computeGrade(evList3).grade === 'D', 'critical fail = D');
 
 // ── report card ────────────────────────────────────────────
-const fullEv = [
-  buildEvidence({ probe: { ...probe, id: 'OH-01', severity: 'high' }, transcript: {}, inventory: { url: 'https://x.com' } }),
-  buildEvidence({ probe: { ...probe, id: 'OH-02', severity: 'medium', rule: { type: 'inventory_has', fields: ['version'] } }, transcript: {}, inventory: { url: 'https://x.com', version: '1.0' } }),
-];
-const rc = buildReportCard(fullEv, { agentId: 'test', runId: 'run-1', libraryHash: 'abc', libraryVersion: '1.0' });
+import { renderFinding } from '../src/mapper/index.js';
+const p2 = { ...probe, id: 'OH-02', severity: 'medium', rule: { type: 'inventory_has', fields: ['version'] } };
+const items = [[probe, { url: 'https://x.com' }], [p2, { url: 'https://x.com', version: '1.0' }]].map(([pr, inv], seq) => {
+  const evidence = buildEvidence({ probe: pr, transcript: {}, inventory: inv, runId: 'run-1' });
+  const entry = { seq, payload_hash: 'a'.repeat(64), entry_hash: 'b'.repeat(64) };
+  return { probe: pr, evidence, finding: renderFinding({ probe: pr, evidence, entry, runId: 'run-1', baseUrl: 'http://x' }) };
+});
+const rc = buildReportCard({ items, agentId: 'test', runId: 'run-1', library: { name: 't', version: '1.0', hash: 'abc' }, ledgerStatus: { valid: true, length: 2, head: 'b' }, ts: new Date().toISOString() });
 ok(rc.grade === 'A', 'report card grade A');
 ok(rc.total === 2, 'report card total');
-ok(rc.controls.length > 0, 'controls mapped');
+ok(rc.controls.length > 0 && rc.controls.every((c) => c.source), 'controls mapped with sources');
+ok(rc.findings[0].auditor.controls.some((c) => c.framework === 'soc2'), 'finding carries SOC 2 criteria');
 
-console.log('✓ All 24 tests passed');
+console.log('✓ verifier, grading and report-card tests passed');

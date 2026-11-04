@@ -1,0 +1,17 @@
+{
+  "name": "loxe-keiki-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Loxe's Keiki agent: four clearance tools on iMessage, Slack, Telegram, email and the OpenAI-compatible API.",
+  "scripts": {
+    "sync": "bun run index.js"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "dependencies": {
+    "@onkeiki/agents": "0.1.6",
+    "effect": "^3.14.0"
+  }
+}

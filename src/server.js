@@ -1,34 +1,27 @@
 // LOXE SERVER ENTRY POINT
 import { serve } from '@hono/node-server';
+import { createDb } from './db/index.js';
 import { createApp } from './app/index.js';
-import { createSentinel } from './sentinel/index.js';
-import { registerWithKeiki, keikiAgentConfig } from './integrations/keiki.js';
+
+for (const f of ['.env.local', '.env']) {
+  try {
+    process.loadEnvFile(f);
+  } catch {}
+}
 
 const port = parseInt(process.env.PORT || '3000', 10);
-const { app, pool } = createApp();
+const baseUrl = (process.env.LOXE_BASE_URL || `http://localhost:${port}`).replace(/\/$/, '');
 
-// Mount sentinel routes on the same app
-const sentinel = createSentinel();
-app.route('/', sentinel.app);
+const db = await createDb();
+const { app, sentinel } = createApp({ db, baseUrl });
+sentinel.start();
 
-// Keiki agent config endpoint
-app.get('/keiki/config', (c) => {
-  const baseUrl = process.env.LOXE_BASE_URL || `http://localhost:${port}`;
-  return c.json(keikiAgentConfig(baseUrl));
+serve({ fetch: app.fetch, port, hostname: '0.0.0.0' }, () => {
+  console.log(`Loxe on ${baseUrl} (db: ${db.engine})`);
 });
 
-serve({ fetch: app.fetch, port }, async () => {
-  console.log(`🔒 Loxe running on port ${port}`);
-
-  // Register with Keiki on startup (best-effort)
-  const baseUrl = process.env.LOXE_BASE_URL || `http://localhost:${port}`;
-  await registerWithKeiki(baseUrl);
-});
-
-// Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('Shutting down…');
-  await pool.end();
-  await sentinel.pool.end();
+  sentinel.stop();
+  await db.close();
   process.exit(0);
 });

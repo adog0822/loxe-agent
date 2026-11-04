@@ -1,262 +1,381 @@
-// LOXE WEB APP — Hono server
-// Endpoints: agent registration, run trigger, status, public clearance page,
-// badge SVG, PDF export, /verify (ledger chain), replay API.
+// LOXE WEB APP — Hono server. Route groups:
+//   /api/*      authenticated, org-scoped product API (docs/API.md)
+//   /a/:id, /badge, /verify, /report, /replay   public proof surfaces (no secrets)
+//   /health, /chat, /schedules, /hooks/maritime, /sentinel/tick   machine contracts
+//   /app/*      the product UI (static files in web/)
 import { Hono } from 'hono';
-import { cors } from 'hono/cors';
-import pg from 'pg';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { id } from '../core/canonical.js';
+import { createAuth, authProvider } from '../auth/index.js';
+import { assertProbeable } from '../collector/guard.js';
 import { Orchestrator } from '../orchestrator/index.js';
 import { Ledger } from '../ledger/index.js';
+import { signingKey } from '../ledger/signing.js';
+import { controlsTable } from '../mapper/index.js';
 import { generatePDF } from '../reporter/pdf.js';
 import { generateBadge } from '../reporter/badge.js';
+import { clearancePage } from '../reporter/page.js';
+import { createSentinel } from '../sentinel/index.js';
+import { integration, integrationStatus } from '../integrations/index.js';
 
-const { Pool } = pg;
-
-export function createApp(config = {}) {
+export function createApp({ db, baseUrl }) {
   const app = new Hono();
-  const pool = new Pool({ connectionString: config.databaseUrl || process.env.DATABASE_URL });
-  const ledger = new Ledger(pool);
+  const auth = createAuth(db);
+  const ledger = new Ledger(db);
+  const orchestrator = new Orchestrator({ db, baseUrl });
+  const sentinel = createSentinel({ db, orchestrator });
 
-  app.use('*', cors());
+  const agentRow = async (agentId, orgId) =>
+    (await db.query(
+      `select * from agents where id = $1 and archived_at is null ${orgId ? 'and org_id = $2' : ''}`,
+      orgId ? [agentId, orgId] : [agentId]
+    )).rows[0];
 
-  // ── Health (Maritime contract: GET /health → 2xx) ────────────────────────
-  app.get('/', (c) =>
-    c.json({ name: 'loxe', version: '0.1.0', status: 'ok' })
-  );
+  async function agentView(a) {
+    const chain = await ledger.verify(a.id);
+    return {
+      id: a.id,
+      name: a.name,
+      url: a.url,
+      source: a.source,
+      maritimeAgentId: a.maritime_agent_id || undefined,
+      grade: a.current_grade || null,
+      lastRunId: a.last_run_id || null,
+      lastRunStatus: a.last_run_id
+        ? (await db.query(`select status from runs where id = $1`, [a.last_run_id])).rows[0]?.status || null
+        : null,
+      lastRunAt: a.last_run_at || null,
+      sentinel: { enabled: a.sentinel_enabled, intervalHours: a.sentinel_interval_hours, nextRunAt: a.sentinel_next_run_at || null },
+      chain: { valid: chain.valid, length: chain.length, head: chain.head },
+      createdAt: a.created_at,
+    };
+  }
+
+  function runView(r) {
+    return {
+      id: r.id,
+      agentId: r.agent_id,
+      status: r.status,
+      progress: r.progress ? JSON.parse(r.progress) : null,
+      grade: r.grade,
+      startedAt: r.started_at,
+      finishedAt: r.finished_at,
+      error: r.error,
+      trigger: r.trigger,
+      libraryVersion: r.library_version,
+      libraryHash: r.library_hash,
+      report: r.report ? JSON.parse(r.report) : null,
+    };
+  }
+
+  // Overlay recorded decisions (ledger 'decision' entries) onto a report's findings.
+  async function withDecisions(run) {
+    if (!run.report) return run;
+    const rows = (await db.query(
+      `select payload from ledger where agent_id = $1 and kind = 'decision' order by seq asc`, [run.agentId]
+    )).rows.map((r) => JSON.parse(r.payload)).filter((d) => d.runId === run.id);
+    for (const d of rows) {
+      const f = run.report.findings.find((x) => x.probeId === d.probeId);
+      if (f) f.decision = { state: d.state, by: d.by, at: d.ts, note: d.note };
+    }
+    return run;
+  }
+
+  // ── Machine contracts ──────────────────────────────────────────────────────
   app.get('/health', (c) => c.json({ status: 'ok' }));
+  app.get('/', (c) => c.redirect('/app/'));
 
-  // ── Maritime chat contract (POST /chat) ─────────────────────────────────
+  // Maritime chat contract: a read-only command surface (runs need an authenticated call).
   app.post('/chat', async (c) => {
-    const body = await c.req.json();
-    const msg = (body.message || '').trim().toLowerCase();
-
-    // Simple command router for Maritime / Keiki integration
-    if (msg.startsWith('run clearance')) {
-      const agentId = msg.replace('run clearance', '').trim();
-      if (!agentId) return c.json({ response: 'Usage: run clearance <agent-id>' });
-      const res = await pool.query('SELECT id, url FROM agents WHERE id = $1', [agentId]);
-      if (res.rows.length === 0) return c.json({ response: `Agent ${agentId} not found. Use "list agents" to see registered agents.` });
-      const agent = res.rows[0];
-      const orchestrator = new Orchestrator({ db: pool, targetUrl: agent.url, agentId: agent.id });
-      const result = await orchestrator.run({});
-      return c.json({ response: `Clearance run complete for ${agentId}. Grade: ${result.reportCard.grade}. Run ID: ${result.runId}` });
+    const body = await c.req.json().catch(() => ({}));
+    const msg = String(body.message || body.messages?.at?.(-1)?.content || '').trim();
+    // Maritime's schedule wakes the VM by sending its prompt here; route it to the sentinel.
+    if (await integration('maritime', 'isSentinelTick', msg)) {
+      const r = await sentinel.tick();
+      return c.json({ response: `Sentinel tick: ${r.due} agent(s) due, ${r.runs.length} run(s) queued.` });
     }
-
-    if (msg === 'list agents') {
-      const res = await pool.query('SELECT id, name, current_grade, last_run_at FROM agents ORDER BY name');
-      if (res.rows.length === 0) return c.json({ response: 'No agents registered. POST /agents to register one.' });
-      const list = res.rows.map(a => `• ${a.name} (${a.id}) — grade: ${a.current_grade || 'ungraded'}`).join('\n');
-      return c.json({ response: `Registered agents:\n${list}` });
+    const m = msg.match(/(agent-[0-9a-f]{12})/i);
+    if (m) {
+      const a = await agentRow(m[1].toLowerCase());
+      if (!a) return c.json({ response: `No agent ${m[1]}.` });
+      const chain = await ledger.verify(a.id);
+      return c.json({
+        response: `${a.name}: grade ${a.current_grade || 'not cleared yet'}. Ledger ${chain.valid ? 'verifies' : 'does NOT verify'} (${chain.length} entries). ${baseUrl}/a/${a.id}`,
+      });
     }
-
-    if (msg === 'help') {
-      return c.json({ response: 'Loxe commands: "list agents", "run clearance <agent-id>", "help". API: POST /agents, POST /agents/:id/run, GET /clearance/:id' });
-    }
-
-    return c.json({ response: 'Loxe — deterministic agent clearance. Commands: "list agents", "run clearance <agent-id>", "help"' });
+    return c.json({ response: 'Send an agent id (agent-…) to get its clearance grade and ledger status.' });
   });
 
-  // ── Agent registration ───────────────────────────────────────────────────
-  app.post('/agents', async (c) => {
-    const body = await c.req.json();
-    const { name, url, headers } = body;
-    if (!name || !url) return c.json({ error: 'name and url required' }, 400);
-    const agentId = id('agent');
-    await pool.query(
-      `INSERT INTO agents (id, name, url, headers, owner_id) VALUES ($1, $2, $3, $4, $5)`,
-      [agentId, name, url, JSON.stringify(headers || {}), body.ownerId || 'default']
-    );
-    return c.json({ id: agentId, name, url }, 201);
+  app.get('/schedules', async (c) => c.json((await integration('maritime', 'schedules')) || []));
+
+  app.post('/hooks/maritime', async (c) => {
+    const raw = await c.req.text();
+    const ok = await integration('maritime', 'verifyWebhook', raw, Object.fromEntries(c.req.raw.headers));
+    if (!ok) return c.json({ error: 'bad signature' }, 401);
+    const event = (await integration('maritime', 'parseWebhookEvent', raw)) || {};
+    const maritimeId = event.agentId;
+    const agents = (await db.query(
+      `select * from agents where maritime_agent_id = $1 and archived_at is null`, [maritimeId]
+    )).rows;
+    const runs = [];
+    for (const a of agents) runs.push((await orchestrator.enqueue(a, { trigger: `maritime:${event.event || "event"}` })).runId);
+    return c.json({ received: true, runs });
   });
 
-  app.get('/agents', async (c) => {
-    const r = await pool.query(`SELECT id, name, url, current_grade, last_run_at, created_at FROM agents ORDER BY created_at DESC`);
-    return c.json(r.rows);
+  app.post('/sentinel/tick', async (c) => {
+    const secret = process.env.LOXE_SCHEDULE_SECRET;
+    const header = c.req.header('authorization') || '';
+    const viaSecret = secret && header === `Bearer ${secret}`;
+    const who = viaSecret ? null : await auth.identify(c);
+    if (!viaSecret && !who) return c.json({ error: 'unauthorized' }, 401);
+    return c.json(await sentinel.tick({ orgId: who?.org.id }));
   });
 
-  app.get('/agents/:id', async (c) => {
-    const r = await pool.query(`SELECT * FROM agents WHERE id = $1`, [c.req.param('id')]);
-    if (!r.rows[0]) return c.json({ error: 'not found' }, 404);
-    const agent = r.rows[0];
-    agent.headers = undefined; // don't leak auth headers
-    return c.json(agent);
+  // ── Public proof surfaces ──────────────────────────────────────────────────
+  app.get('/.well-known/loxe-signing-key', async (c) => {
+    const k = await signingKey(db);
+    return c.json({ alg: 'Ed25519', keyId: k.keyId, publicKey: k.publicPem });
   });
 
-  // ── Trigger a clearance run ──────────────────────────────────────────────
-  app.post('/agents/:id/run', async (c) => {
-    const agentId = c.req.param('id');
-    const agent = (await pool.query(`SELECT * FROM agents WHERE id = $1`, [agentId])).rows[0];
-    if (!agent) return c.json({ error: 'agent not found' }, 404);
-
-    const headers = agent.headers ? JSON.parse(agent.headers) : {};
-    const orch = new Orchestrator({
-      db: pool,
-      targetUrl: agent.url,
-      targetHeaders: headers,
-      agentId,
-    });
-
-    // Run asynchronously — return runId immediately
-    const runId = id('run');
-    // But for MVP simplicity, we run synchronously and return the result
-    try {
-      const result = await orch.run();
-      return c.json(result);
-    } catch (err) {
-      return c.json({ error: err.message }, 500);
-    }
+  app.get('/a/:agentId', async (c) => {
+    const a = await agentRow(c.req.param('agentId'));
+    if (!a || !a.is_public) return c.html(clearancePage({ notFound: true }), 404);
+    const run = a.last_run_id ? (await db.query(`select * from runs where id = $1`, [a.last_run_id])).rows[0] : null;
+    const chain = await ledger.verify(a.id);
+    return c.html(clearancePage({ agent: a, report: run?.report ? JSON.parse(run.report) : null, chain, baseUrl }));
   });
+  app.get('/clearance/:agentId/page', (c) => c.redirect(`/a/${c.req.param('agentId')}`, 301));
 
-  // ── Run status & history ─────────────────────────────────────────────────
-  app.get('/runs/:id', async (c) => {
-    const r = await pool.query(`SELECT * FROM runs WHERE id = $1`, [c.req.param('id')]);
-    if (!r.rows[0]) return c.json({ error: 'not found' }, 404);
-    const run = r.rows[0];
-    if (run.report) run.report = JSON.parse(run.report);
-    return c.json(run);
-  });
-
-  app.get('/agents/:id/runs', async (c) => {
-    const r = await pool.query(
-      `SELECT id, status, grade, started_at, finished_at, library_hash, library_version
-       FROM runs WHERE agent_id = $1 ORDER BY started_at DESC LIMIT 50`,
-      [c.req.param('id')]
-    );
-    return c.json(r.rows);
-  });
-
-  // ── Public clearance page (JSON) ─────────────────────────────────────────
   app.get('/clearance/:agentId', async (c) => {
-    const agent = (await pool.query(
-      `SELECT id, name, url, current_grade, last_run_id, last_run_at FROM agents WHERE id = $1`,
-      [c.req.param('agentId')]
-    )).rows[0];
-    if (!agent) return c.json({ error: 'not found' }, 404);
-    if (!agent.last_run_id) return c.json({ agent, message: 'no runs yet' });
-
-    const run = (await pool.query(`SELECT * FROM runs WHERE id = $1`, [agent.last_run_id])).rows[0];
-    const report = run?.report ? JSON.parse(run.report) : null;
-    const chain = await ledger.verify(agent.id);
-
+    const a = await agentRow(c.req.param('agentId'));
+    if (!a || !a.is_public) return c.json({ error: 'not found' }, 404);
+    const run = a.last_run_id ? (await db.query(`select * from runs where id = $1`, [a.last_run_id])).rows[0] : null;
     return c.json({
-      agent: { id: agent.id, name: agent.name, grade: agent.current_grade },
-      run: {
-        id: run.id,
-        grade: run.grade,
-        startedAt: run.started_at,
-        finishedAt: run.finished_at,
-        libraryVersion: run.library_version,
-        libraryHash: run.library_hash,
-      },
-      report,
-      chain,
-      disclaimer:
-        'This report states that the agent was cleared against the specified probe library ' +
-        'on the date shown. It does not constitute certification, compliance, or approval.',
+      agent: { id: a.id, name: a.name, grade: a.current_grade },
+      report: run?.report ? JSON.parse(run.report) : null,
+      chain: await ledger.verify(a.id),
     });
   });
 
-  // ── Public clearance page (HTML) ─────────────────────────────────────────
-  app.get('/clearance/:agentId/page', async (c) => {
-    const agent = (await pool.query(
-      `SELECT id, name, current_grade, last_run_id, last_run_at FROM agents WHERE id = $1`,
-      [c.req.param('agentId')]
-    )).rows[0];
-    if (!agent) return c.text('Agent not found', 404);
-
-    const run = agent.last_run_id
-      ? (await pool.query(`SELECT * FROM runs WHERE id = $1`, [agent.last_run_id])).rows[0]
-      : null;
-    const report = run?.report ? JSON.parse(run.report) : null;
-
-    const gradeColor = { A: '#22c55e', B: '#84cc16', C: '#eab308', D: '#f97316', F: '#ef4444' };
-    const gc = gradeColor[agent.current_grade] || '#6b7280';
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Loxe Clearance — ${agent.name}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;justify-content:center;padding:2rem}
-.card{max-width:640px;width:100%;background:#1e293b;border-radius:12px;padding:2rem;box-shadow:0 4px 24px rgba(0,0,0,.3)}
-.grade{width:80px;height:80px;border-radius:50%;background:${gc};display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:#fff;margin:0 auto 1rem}
-h1{text-align:center;font-size:1.5rem;margin-bottom:.5rem}
-.meta{text-align:center;color:#94a3b8;font-size:.85rem;margin-bottom:1.5rem}
-.stats{display:flex;gap:1rem;justify-content:center;margin-bottom:1.5rem}
-.stat{text-align:center;padding:.5rem 1rem;background:#0f172a;border-radius:8px}
-.stat-val{font-size:1.2rem;font-weight:600}
-.stat-label{font-size:.7rem;color:#94a3b8;text-transform:uppercase}
-.findings{border-top:1px solid #334155;padding-top:1rem}
-.finding{padding:.5rem 0;border-bottom:1px solid #1e293b}
-.pass{color:#22c55e}.fail{color:#ef4444}.inconclusive{color:#6b7280}
-.disclaimer{margin-top:1.5rem;padding:1rem;background:#0f172a;border-radius:8px;font-size:.75rem;color:#64748b;text-align:center}
-a{color:#38bdf8}
-</style></head><body><div class="card">
-<div class="grade">${agent.current_grade || '—'}</div>
-<h1>${agent.name}</h1>
-<div class="meta">${report ? `Cleared ${new Date(report.ts).toLocaleDateString()} · Library v${report.libraryVersion}` : 'No runs yet'}</div>
-${report ? `
-<div class="stats">
-<div class="stat"><div class="stat-val">${report.passed}</div><div class="stat-label">Passed</div></div>
-<div class="stat"><div class="stat-val">${report.failed}</div><div class="stat-label">Failed</div></div>
-<div class="stat"><div class="stat-val">${report.inconclusive}</div><div class="stat-label">Inconclusive</div></div>
-<div class="stat"><div class="stat-val">${report.total}</div><div class="stat-label">Total</div></div>
-</div>
-<div class="findings">
-${report.findings.map(f => `<div class="finding"><span class="${f.status}">${f.status === 'pass' ? '✓' : f.status === 'fail' ? '✗' : '?'}</span> <strong>[${f.probeId}]</strong> ${f.plainEnglish}</div>`).join('')}
-</div>` : ''}
-<div class="disclaimer">This report states that the agent was cleared against the specified probe library on the date shown. It does not constitute certification, compliance, or approval by any standards body. <a href="/verify/${agent.id}">Verify the ledger chain →</a></div>
-</div></body></html>`;
-    return c.html(html);
-  });
-
-  // ── Badge SVG ────────────────────────────────────────────────────────────
   app.get('/badge/:agentId', async (c) => {
-    const agent = (await pool.query(
-      `SELECT current_grade FROM agents WHERE id = $1`,
-      [c.req.param('agentId')]
-    )).rows[0];
-    const grade = agent?.current_grade || 'N/A';
-    const svg = generateBadge(grade);
-    return c.body(svg, 200, {
+    const a = await agentRow(c.req.param('agentId'));
+    return c.body(generateBadge(a?.is_public ? a.current_grade || 'N/A' : 'N/A'), 200, {
       'Content-Type': 'image/svg+xml',
-      'Cache-Control': 'no-cache, max-age=300',
+      'Cache-Control': 'max-age=300',
     });
   });
 
-  // ── PDF export ───────────────────────────────────────────────────────────
   app.get('/report/:runId/pdf', async (c) => {
-    const run = (await pool.query(`SELECT * FROM runs WHERE id = $1`, [c.req.param('runId')])).rows[0];
-    if (!run || !run.report) return c.text('Run not found or incomplete', 404);
-    const report = JSON.parse(run.report);
-    const pdf = await generatePDF(report);
+    const run = (await db.query(
+      `select r.* from runs r join agents a on a.id = r.agent_id where r.id = $1 and a.is_public`, [c.req.param('runId')]
+    )).rows[0];
+    if (!run?.report) return c.text('Run not found or not finished', 404);
+    const agent = await agentRow(run.agent_id);
+    const view = await withDecisions(runView(run));
+    const pdf = await generatePDF(view.report, { agentName: agent?.name || run.agent_id, baseUrl });
     return c.body(pdf, 200, {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="loxe-${run.id}.pdf"`,
     });
   });
 
-  // ── Verify ledger chain ──────────────────────────────────────────────────
-  app.get('/verify/:agentId', async (c) => {
-    const agentId = c.req.param('agentId');
-    const chain = await ledger.verify(agentId);
-    return c.json({ agentId, ...chain });
+  app.get('/verify', async (c) => {
+    const hash = (c.req.query('hash') || '').trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) return c.json({ error: 'pass ?hash= with a 64-character SHA-256 hex hash' }, 400);
+    return c.json(await ledger.findByHash(hash));
   });
+  app.get('/verify/:agentId', async (c) => c.json({ agentId: c.req.param('agentId'), ...(await ledger.verify(c.req.param('agentId'))) }));
+  app.get('/ledger/:agentId/export', async (c) => c.json(await ledger.export(c.req.param('agentId'))));
 
-  // ── Replay API (get raw transcripts for a run) ───────────────────────────
   app.get('/replay/:runId', async (c) => {
-    const r = await pool.query(
-      `SELECT probe_id, request_kind, response_body, status_code, latency_ms, created_at
-       FROM vendor_requests WHERE run_id = $1 ORDER BY created_at ASC`,
+    const rows = (await db.query(
+      `select probe_id, request_kind, request_body, response_body, status_code, latency_ms, created_at
+       from vendor_requests where run_id = $1 order by created_at asc`,
       [c.req.param('runId')]
+    )).rows;
+    return c.json({
+      runId: c.req.param('runId'),
+      transcripts: rows.map((r) => ({ ...r, request_body: JSON.parse(r.request_body || 'null'), response_body: JSON.parse(r.response_body || 'null') })),
+    });
+  });
+
+  // ── Product API (authenticated) ────────────────────────────────────────────
+  const api = new Hono();
+
+  api.get('/config', (c) =>
+    c.json({ auth: { provider: authProvider(), publishableKey: process.env.CLERK_PUBLISHABLE_KEY || undefined }, baseUrl })
+  );
+  api.post('/dev/login', async (c) => {
+    if (authProvider() !== 'dev') return c.json({ error: 'dev sign-in is off' }, 404);
+    const { email } = await c.req.json().catch(() => ({}));
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email || '')) return c.json({ error: 'enter an email address' }, 400);
+    await auth.devLogin(c, email.toLowerCase());
+    return c.json({ ok: true });
+  });
+  api.post('/dev/logout', (c) => {
+    auth.devLogout(c);
+    return c.json({ ok: true });
+  });
+
+  api.use('*', auth.requireAuth);
+  const org = (c) => c.get('auth').org.id;
+
+  api.get('/me', (c) => {
+    const { user, org: o, via } = c.get('auth');
+    return c.json({ user, org: o, via });
+  });
+
+  api.post('/keys', async (c) => {
+    const { name } = await c.req.json().catch(() => ({}));
+    return c.json(await auth.createApiKey(org(c), name || 'API key', c.get('auth').user.id), 201);
+  });
+  api.get('/keys', async (c) =>
+    c.json((await db.query(
+      `select id, name, prefix, created_at, last_used_at from api_keys where org_id = $1 and revoked_at is null order by created_at desc`,
+      [org(c)]
+    )).rows)
+  );
+  api.delete('/keys/:id', async (c) => {
+    await db.query(`update api_keys set revoked_at = now() where id = $1 and org_id = $2`, [c.req.param('id'), org(c)]);
+    return c.body(null, 204);
+  });
+
+  api.get('/agents', async (c) => {
+    const rows = (await db.query(
+      `select * from agents where org_id = $1 and archived_at is null order by created_at desc`, [org(c)]
+    )).rows;
+    return c.json(await Promise.all(rows.map(agentView)));
+  });
+
+  api.post('/agents', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    let { name, url, headers, source = 'url', maritimeAgentId } = body;
+    if (source === 'maritime' && maritimeAgentId && !url) {
+      const m = await integration('maritime', 'getAgent', maritimeAgentId);
+      if (!m?.url) return c.json({ error: 'that Maritime agent has no public URL yet' }, 400);
+      url = m.url;
+      name ||= m.name;
+    }
+    if (!name || !url) return c.json({ error: 'name and url are required' }, 400);
+    try {
+      await assertProbeable(url);
+    } catch (err) {
+      return c.json({ error: err.message }, 400);
+    }
+    if (headers && typeof headers !== 'object') return c.json({ error: 'headers must be an object' }, 400);
+    const agentId = id('agent');
+    await db.query(
+      `insert into agents (id, name, url, headers, owner_id, org_id, source, maritime_agent_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [agentId, String(name).slice(0, 120), url, JSON.stringify(headers || {}), c.get('auth').user.id, org(c), source, maritimeAgentId || null]
     );
-    return c.json({ runId: c.req.param('runId'), transcripts: r.rows });
+    return c.json(await agentView(await agentRow(agentId)), 201);
   });
 
-  // ── Ledger entries for a run ─────────────────────────────────────────────
-  app.get('/ledger/:runId', async (c) => {
-    const entries = await ledger.entriesForRun(c.req.param('runId'));
-    return c.json(entries);
+  api.get('/agents/:id', async (c) => {
+    const a = await agentRow(c.req.param('id'), org(c));
+    return a ? c.json(await agentView(a)) : c.json({ error: 'not found' }, 404);
   });
 
-  return { app, pool };
+  api.delete('/agents/:id', async (c) => {
+    await db.query(`update agents set archived_at = now() where id = $1 and org_id = $2`, [c.req.param('id'), org(c)]);
+    return c.body(null, 204);
+  });
+
+  api.post('/agents/:id/runs', async (c) => {
+    const a = await agentRow(c.req.param('id'), org(c));
+    if (!a) return c.json({ error: 'not found' }, 404);
+    const { runId, status } = await orchestrator.enqueue(a, { trigger: 'manual' });
+    return c.json({ runId, status }, 202);
+  });
+
+  api.get('/agents/:id/runs', async (c) =>
+    c.json((await db.query(
+      `select id, status, grade, started_at, finished_at, library_version, trigger from runs
+       where agent_id = $1 and org_id = $2 order by started_at desc limit 50`,
+      [c.req.param('id'), org(c)]
+    )).rows)
+  );
+
+  // Full chain for the in-browser verify trace: the browser recomputes every entry hash.
+  api.get('/agents/:id/ledger', async (c) => {
+    const a = await agentRow(c.req.param('id'), org(c));
+    if (!a) return c.json({ error: 'not found' }, 404);
+    const rows = (await db.query(
+      `select seq, kind, prev_hash, payload_hash, entry_hash, payload, created_at from ledger where agent_id = $1 order by seq asc`,
+      [a.id]
+    )).rows;
+    return c.json({
+      entries: rows.map((r) => {
+        const p = JSON.parse(r.payload);
+        return {
+          seq: r.seq, kind: r.kind, prevHash: r.prev_hash, payloadHash: r.payload_hash, entryHash: r.entry_hash,
+          label: r.kind === 'decision' ? `Decision on ${p.probeId}: ${p.state}` : `${p.probeId} ${p.title}`,
+          ts: r.created_at, payload: r.payload,
+        };
+      }),
+    });
+  });
+
+  api.post('/agents/:id/sentinel', async (c) => {
+    const a = await agentRow(c.req.param('id'), org(c));
+    if (!a) return c.json({ error: 'not found' }, 404);
+    const { enabled, intervalHours } = await c.req.json().catch(() => ({}));
+    const hours = Math.min(Math.max(parseInt(intervalHours ?? a.sentinel_interval_hours, 10) || 24, 1), 24 * 30);
+    const r = (await db.query(
+      `update agents set sentinel_enabled = $1, sentinel_interval_hours = $2,
+         sentinel_next_run_at = case when $1 then now() + make_interval(hours => $2) else null end, updated_at = now()
+       where id = $3 returning sentinel_enabled, sentinel_interval_hours, sentinel_next_run_at`,
+      [!!enabled, hours, a.id]
+    )).rows[0];
+    return c.json({ enabled: r.sentinel_enabled, intervalHours: r.sentinel_interval_hours, nextRunAt: r.sentinel_next_run_at });
+  });
+
+  api.get('/runs/:id', async (c) => {
+    const r = (await db.query(`select * from runs where id = $1 and org_id = $2`, [c.req.param('id'), org(c)])).rows[0];
+    return r ? c.json(await withDecisions(runView(r))) : c.json({ error: 'not found' }, 404);
+  });
+
+  api.post('/runs/:id/replay/:probeId', async (c) => {
+    const r = (await db.query(`select * from runs where id = $1 and org_id = $2`, [c.req.param('id'), org(c)])).rows[0];
+    if (!r) return c.json({ error: 'not found' }, 404);
+    const a = await agentRow(r.agent_id, org(c));
+    try {
+      return c.json(await orchestrator.replay(r, a, c.req.param('probeId')));
+    } catch (err) {
+      return c.json({ error: err.message }, 400);
+    }
+  });
+
+  const DECISIONS = ['open', 'accepted_exception', 'fix_proposed', 'resolved'];
+  api.post('/runs/:id/findings/:probeId/decision', async (c) => {
+    const r = (await db.query(`select * from runs where id = $1 and org_id = $2`, [c.req.param('id'), org(c)])).rows[0];
+    if (!r?.report) return c.json({ error: 'run not found or not finished' }, 404);
+    const probeId = c.req.param('probeId');
+    if (!JSON.parse(r.report).findings.some((f) => f.probeId === probeId)) return c.json({ error: 'no such finding' }, 404);
+    const { state, note } = await c.req.json().catch(() => ({}));
+    if (!DECISIONS.includes(state)) return c.json({ error: `state must be one of ${DECISIONS.join(', ')}` }, 400);
+    const who = c.get('auth').user;
+    const decision = { type: 'decision', agentId: r.agent_id, runId: r.id, probeId, state, note: String(note || '').slice(0, 2000), by: who.email || who.id, ts: new Date().toISOString() };
+    const entry = await ledger.append(r.agent_id, decision, { kind: 'decision', runId: r.id });
+    await integration('supermemory', 'rememberDecision', { orgId: org(c), agentId: r.agent_id, probeId, state, note: decision.note });
+    return c.json({ state, by: decision.by, at: decision.ts, note: decision.note, ledgerSeq: entry.seq, entryHash: entry.entry_hash });
+  });
+
+  api.get('/integrations', async (c) => c.json({ ...(await integrationStatus()), auth: { provider: authProvider() } }));
+  api.get('/maritime/agents', async (c) => c.json((await integration('maritime', 'listAgents')) || []));
+  api.get('/memory/:agentId', async (c) => {
+    const a = await agentRow(c.req.param('agentId'), org(c));
+    if (!a) return c.json({ error: 'not found' }, 404);
+    return c.json((await integration('supermemory', 'recallAgent', { orgId: org(c), agentId: a.id })) || { items: [] });
+  });
+  api.get('/controls', (c) => c.json(controlsTable()));
+
+  app.route('/api', api);
+
+  // ── Product UI ─────────────────────────────────────────────────────────────
+  app.get('/app', (c) => c.redirect('/app/'));
+  app.use('/app/*', serveStatic({ root: './web', rewriteRequestPath: (p) => p.replace(/^\/app/, '') }));
+
+  return { app, orchestrator, sentinel };
 }

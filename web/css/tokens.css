@@ -1,0 +1,167 @@
+/* Loxe design tokens. Every value in app.css comes from here.
+   Neutrals carry chroma 0.004 to 0.012 toward hue 205 (clear water), so the
+   page reads fresh and cool without being navy. State colour is the only
+   saturated colour in the product. */
+
+:root {
+  color-scheme: light;
+
+  /* Neutral ladder, light */
+  --bg:          oklch(0.985 0.003 205);
+  --surface:     oklch(0.998 0.001 205);
+  --sunk:        oklch(0.962 0.005 205);
+  --line:        oklch(0.905 0.006 205);
+  --line-strong: oklch(0.80 0.008 205);
+  --ink:         oklch(0.20 0.012 215);
+  --ink-2:       oklch(0.39 0.012 215);
+  --ink-3:       oklch(0.49 0.010 215);
+  --on-ink:      oklch(0.985 0.003 205);
+  --on-ink-2:    oklch(0.80 0.010 215);
+  --on-ink-line: oklch(1 0 0 / 0.14);
+
+  /* The hero tile. On light it is ink, on dark it is a raised slab. */
+  --hero-bg:     var(--ink);
+  --hero-ink:    var(--on-ink);
+  --hero-ink-2:  var(--on-ink-2);
+  --hero-line:   var(--on-ink-line);
+  --hero-btn-bg: var(--on-ink);
+  --hero-btn-ink:var(--ink);
+
+  /* State. Green = proven, red = gap, amber = stale or inconclusive. */
+  --proven:      oklch(0.47 0.120 152);  /* text, 5.9:1 on bg */
+  --proven-fill: oklch(0.68 0.175 150);  /* marks, 3.1:1 on bg */
+  --proven-wash: oklch(0.958 0.040 152);
+  --proven-live: oklch(0.84 0.180 152);  /* marks on the hero tile */
+  --gap:         oklch(0.53 0.195 27);   /* text and marks, 5.0:1 */
+  --gap-fill:    oklch(0.60 0.215 27);
+  --gap-wash:    oklch(0.958 0.030 27);
+  --gap-live:    oklch(0.72 0.180 30);
+  --stale:       oklch(0.50 0.100 72);   /* text, 5.2:1 */
+  --stale-fill:  oklch(0.76 0.140 78);
+  --stale-wash:  oklch(0.962 0.040 85);
+  --stale-live:  oklch(0.84 0.130 82);
+
+  /* Type: one Didone for H1, grade and report cover; one sans; one mono for raw data. */
+  --serif: "Bodoni Moda", "Didot", "Bodoni 72", serif;
+  --sans:  "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:  "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --t-grade:  7.5rem;    /* 120 serif, report grade */
+  --t-h1:     2.75rem;   /* 44 serif, word-only H1 */
+  --t-h1-num: 2.25rem;   /* 36 sans 600, H1 that carries a number */
+  --t-h2:     1.375rem;  /* 22 sans 600 */
+  --t-h3:     1.0625rem; /* 17 sans 600 */
+  --t-body:   0.9375rem; /* 15 sans 400 */
+  --t-small:  0.8125rem; /* 13 sans 500 */
+  --t-mono:   0.75rem;   /* 12 mono */
+
+  --lh-tight: 1.05;
+  --lh-head:  1.2;
+  --lh-body:  1.5;
+  --track-s:  0.01em;
+
+  /* Space, 4px base */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+
+  /* Geometry: 4 small, 6 controls, 8 is the ceiling */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --hair: 1px;
+  --rule: 2px;
+
+  /* Shell */
+  --bar-h: 56px;
+  --max-w: 1280px;
+  --gutter: 32px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:  cubic-bezier(0.4, 0, 1, 1);
+  --d-focus:  120ms;
+  --d-state:  180ms;
+  --d-screen: 220ms;
+  --d-fill:   520ms;
+
+  /* Layers */
+  --z-bar: 10;
+  --z-toast: 60;
+}
+
+/* Dark ladder: well 0.13, page 0.155, tile 0.195, raised 0.235. Text never pure white. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg:          oklch(0.155 0.008 215);
+    --surface:     oklch(0.195 0.009 215);
+    --sunk:        oklch(0.130 0.008 215);
+    --line:        oklch(0.290 0.010 215);
+    --line-strong: oklch(0.420 0.010 215);
+    --ink:         oklch(0.930 0.005 205);
+    --ink-2:       oklch(0.820 0.007 205);
+    --ink-3:       oklch(0.710 0.008 205);
+    --on-ink:      oklch(0.160 0.008 215);
+    --on-ink-2:    oklch(0.400 0.010 215);
+    --on-ink-line: oklch(0 0 0 / 0.14);
+    --hero-bg:     oklch(0.240 0.012 215);
+    --hero-ink:    oklch(0.940 0.005 205);
+    --hero-ink-2:  oklch(0.800 0.008 205);
+    --hero-line:   oklch(1 0 0 / 0.10);
+    --hero-btn-bg: oklch(0.940 0.005 205);
+    --hero-btn-ink:oklch(0.180 0.010 215);
+    --proven:      oklch(0.82 0.165 152);
+    --proven-fill: oklch(0.76 0.175 152);
+    --proven-wash: oklch(0.255 0.045 152);
+    --proven-live: oklch(0.82 0.165 152);
+    --gap:         oklch(0.72 0.180 32);
+    --gap-fill:    oklch(0.68 0.200 30);
+    --gap-wash:    oklch(0.255 0.050 27);
+    --gap-live:    oklch(0.72 0.180 32);
+    --stale:       oklch(0.83 0.120 82);
+    --stale-fill:  oklch(0.78 0.130 80);
+    --stale-wash:  oklch(0.255 0.040 82);
+    --stale-live:  oklch(0.83 0.120 82);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:          oklch(0.155 0.008 215);
+  --surface:     oklch(0.195 0.009 215);
+  --sunk:        oklch(0.130 0.008 215);
+  --line:        oklch(0.290 0.010 215);
+  --line-strong: oklch(0.420 0.010 215);
+  --ink:         oklch(0.930 0.005 205);
+  --ink-2:       oklch(0.820 0.007 205);
+  --ink-3:       oklch(0.710 0.008 205);
+  --on-ink:      oklch(0.160 0.008 215);
+  --on-ink-2:    oklch(0.400 0.010 215);
+  --on-ink-line: oklch(0 0 0 / 0.14);
+  --hero-bg:     oklch(0.240 0.012 215);
+  --hero-ink:    oklch(0.940 0.005 205);
+  --hero-ink-2:  oklch(0.800 0.008 205);
+  --hero-line:   oklch(1 0 0 / 0.10);
+  --hero-btn-bg: oklch(0.940 0.005 205);
+  --hero-btn-ink:oklch(0.180 0.010 215);
+  --proven:      oklch(0.82 0.165 152);
+  --proven-fill: oklch(0.76 0.175 152);
+  --proven-wash: oklch(0.255 0.045 152);
+  --proven-live: oklch(0.82 0.165 152);
+  --gap:         oklch(0.72 0.180 32);
+  --gap-fill:    oklch(0.68 0.200 30);
+  --gap-wash:    oklch(0.255 0.050 27);
+  --gap-live:    oklch(0.72 0.180 32);
+  --stale:       oklch(0.83 0.120 82);
+  --stale-fill:  oklch(0.78 0.130 80);
+  --stale-wash:  oklch(0.255 0.040 82);
+  --stale-live:  oklch(0.83 0.120 82);
+}
+
+@media (max-width: 760px) {
+  :root {
+    --gutter: 16px;
+    --t-h1: 2.125rem;
+    --t-h1-num: 1.75rem;
+    --t-grade: 5.5rem;
+  }
+}

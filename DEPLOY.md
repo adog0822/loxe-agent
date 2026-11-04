@@ -1,109 +1,50 @@
-# Deploying Loxe on Maritime
+# Deploying Loxe
 
-## Prerequisites
+## 1. Postgres (Supabase)
 
-- Maritime account with API key (`mk_...`)
-- GitHub repo: https://github.com/adog0822/loxe-agent
-- Supabase project: `mgoicirvlkqoxysebdzi` (schema already applied)
+Set `DATABASE_URL` to the Supabase connection string. Migrations run on boot (`migrations/*.sql`,
+tracked in `schema_migrations`). A database that already has the 001 schema is adopted as-is.
+Note: ledger rows written by the pre-fix code fail verification by design (their payload hashes never
+matched). Archive those agents and re-clear them.
 
-## Step 1: Push code to GitHub
+## 2. Auth (Clerk)
 
-```bash
-cd loxe
-git remote set-url origin https://github.com/adog0822/loxe-agent.git
-git push -u origin main
-```
+Create a Clerk application, then set `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY`. Turn on Google
+sign-in in the Clerk dashboard if you want it. Clerk Organizations map to Loxe orgs; users without one
+get a personal org. Dev sign-in is disabled whenever `NODE_ENV=production` or Clerk is configured.
 
-## Step 2: Create the agent on Maritime
-
-Using the Maritime CLI:
+## 3. Signing key
 
 ```bash
-maritime create loxe --repo https://github.com/adog0822/loxe-agent
+node -e "console.log(require('crypto').generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'}).replace(/\n/g,'\\\\n'))"
 ```
 
-Or via the API:
+Set the output as `LOXE_SIGNING_KEY`. Keep it stable: it signs every ledger head.
+
+## 4. Maritime
 
 ```bash
-curl -X POST https://api.maritime.sh/api/agents \
-  -H "Authorization: Bearer $MARITIME_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "loxe",
-    "framework": "custom",
-    "githubRepo": "https://github.com/adog0822/loxe-agent",
-    "exposedPort": 3000,
-    "description": "Deterministic agent clearance system",
-    "env": [
-      {"key": "DATABASE_URL", "value": "<your-supabase-connection-string>"},
-      {"key": "KEIKI_API_KEY", "value": "<your-keiki-key>"},
-      {"key": "SUPERMEMORY_API_KEY", "value": "<your-supermemory-key>"},
-      {"key": "MARITIME_API_KEY", "value": "<your-maritime-key>"}
-    ]
-  }'
+MARITIME_API_KEY=mk_... DATABASE_URL=... CLERK_SECRET_KEY=... CLERK_PUBLISHABLE_KEY=... \
+SUPERMEMORY_API_KEY=... KEIKI_API_KEY=... LOXE_SIGNING_KEY=... NODE_ENV=production \
+npm run deploy:maritime
 ```
 
-Or via the SDK:
+The script creates (or updates) the `loxe` agent from `https://github.com/adog0822/loxe-agent` on port
+3000, stores env as secrets, registers the `agent.deployed` webhook at `/hooks/maritime` (its secret goes
+straight into `MARITIME_WEBHOOK_SECRET`), sets `LOXE_BASE_URL`, and prints the URL. On boot Loxe pushes
+its hourly schedule; the schedule wakes `/chat` with `loxe:sentinel-tick`, which re-clears due agents.
+Push the code to the GitHub repo first; the script restarts the agent but Maritime has no documented
+"rebuild from latest commit" call.
 
-```javascript
-import { Maritime } from 'maritime-sdk';
+## 5. Keiki
 
-const m = new Maritime({ apiKey: process.env.MARITIME_API_KEY });
-const agent = await m.agents.create({
-  name: 'loxe',
-  template: 'custom',
-  githubRepo: 'https://github.com/adog0822/loxe-agent',
-  exposedPort: 3000,
-  description: 'Deterministic agent clearance system',
-  env: [
-    { key: 'DATABASE_URL', value: process.env.DATABASE_URL },
-    { key: 'KEIKI_API_KEY', value: process.env.KEIKI_API_KEY },
-    { key: 'SUPERMEMORY_API_KEY', value: process.env.SUPERMEMORY_API_KEY },
-  ],
-});
-console.log('Deployed:', agent.id);
-```
+See `keiki-agent/README.md`: create an org API key in Loxe (`POST /api/keys`), then `bun run sync` with
+`KEIKI_API_KEY`, `LOXE_BASE_URL`, `LOXE_API_KEY`. Attach iMessage, Slack, Telegram and email in the Keiki
+dashboard. Put the printed agent id in Loxe's `KEIKI_AGENT_ID`.
 
-## Step 3: Set LOXE_BASE_URL
-
-After deployment, Maritime assigns a URL. Set it as an env var:
+## 6. Check
 
 ```bash
-maritime env set LOXE_BASE_URL https://<your-agent-url>.maritime.sh
+curl $LOXE_BASE_URL/health
+LOXE_BASE_URL=... LOXE_API_KEY=lx_... npx loxe clear https://your-agent.example.com
 ```
-
-## Step 4: Verify
-
-```bash
-# Health check
-curl https://<your-agent-url>.maritime.sh/health
-
-# Register a target agent
-curl -X POST https://<your-agent-url>.maritime.sh/agents \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-agent", "url": "https://my-agent.example.com"}'
-
-# Trigger a clearance run
-curl -X POST https://<your-agent-url>.maritime.sh/agents/<agent-id>/run
-```
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | Supabase Postgres connection string |
-| `PORT` | No | Server port (default: 3000, Maritime injects this) |
-| `LOXE_BASE_URL` | No | Public URL for badge links and Keiki registration |
-| `KEIKI_API_KEY` | No | Keiki integration key |
-| `SUPERMEMORY_API_KEY` | No | Supermemory per-org memory key |
-| `MARITIME_API_KEY` | No | For SDK features within the agent |
-| `LOXE_PROBE_LIBRARY` | No | Custom probe library path (default: probes/library.example.json) |
-
-## Maritime Contract Compliance
-
-Loxe satisfies the Maritime agent contract:
-- ✅ Binds on `0.0.0.0:$PORT`
-- ✅ `GET /health` → 200
-- ✅ `POST /chat` → `{ "response": "..." }`
-- ✅ Dockerfile at repo root
-- ✅ Node 22 Alpine image
