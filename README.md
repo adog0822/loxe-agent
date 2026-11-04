@@ -1,6 +1,6 @@
 # Loxe
 
-Deterministic agent clearance system. No LLM decides pass/fail — every evaluation is pure code against a frozen, versioned probe library, with results hash-chained into an append-only ledger.
+Deterministic agent clearance system. Every evaluation is pure code against a frozen, versioned probe library, with results hash-chained into an append-only ledger.
 
 ## What it does
 
