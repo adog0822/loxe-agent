@@ -69,7 +69,7 @@ function slackBlock(team) {
   const head = html`<div class="csec__head"><h2 class="h2">Slack</h2><p class="body">Loxe posts in a channel you pick when an agent's grade changes, when its evidence ledger stops verifying, or when a test cannot finish.</p></div>`;
   if (team?.error) return html`${head}<p class="body">${mark('stale', { size: 's' })} Did not load: ${team.error.message}</p>`;
   if (!s?.connected) return html`${head}
-    <ol class="steps body">
+    <ol class="isteps body">
       <li>In Slack, open <b>Tools &gt; Apps</b>, add <b>Incoming WebHooks</b>, and pick the channel.</li>
       <li>Copy the webhook URL it gives you and paste it here.</li>
     </ol>
@@ -92,7 +92,7 @@ function githubBlock(team, agents) {
   return html`<div class="csec__head"><h2 class="h2">GitHub</h2><p class="body">Test your agent on every pull request and deploy. The check fails when the grade is worse than the minimum you set, so a pull request that makes the agent less safe cannot merge.</p></div>
     ${last ? html`<p class="body">${mark(last.status === 'completed' ? 'ok' : last.status === 'failed' ? 'broken' : 'stale', { size: 's' })} Last check from GitHub: <b>${last.agentName}</b>, ${last.grade ? `grade ${last.grade}` : last.status}${last.at ? `, ${ago(last.at)}` : ''}.</p>` : html`<p class="hint">No checks from GitHub yet.</p>`}
     ${!agents.length ? html`<p class="body">Add an agent first. <a class="link" href="#/add">Add agent</a></p>` : html`
-    <ol class="steps body">
+    <ol class="isteps body">
       <li><div>Create a key for GitHub.</div>
         <div class="intform__btns"><button class="btn" type="button" id="gh-key">Create key</button></div><div id="gh-newkey"></div></li>
       <li>In your repo, open <b>Settings &gt; Secrets and variables &gt; Actions</b> and add it as <code class="mono">LOXE_API_KEY</code>.</li>
