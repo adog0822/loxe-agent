@@ -48,7 +48,7 @@ export async function render(main, ctx) {
   main.innerHTML = String(html`
     <article class="why sec">
       <header class="why__hero">
-        <h1 class="h1 why__h1">What Loxe touches, and what it never does.</h1>
+        <h1 class="h1 h1--sans why__h1">What Loxe touches, and what it never does.</h1>
         <p class="why__line">Loxe is read-only toward your systems. It sends test messages to one URL you choose and records what comes back.</p>
       </header>
 
