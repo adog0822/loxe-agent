@@ -1,0 +1,256 @@
+{
+  "version": "2026.11.0",
+  "frameworks": [
+    {
+      "id": "soc2",
+      "name": "AICPA Trust Services Criteria (SOC 2)",
+      "version": "2017 TSC, revised points of focus 2022",
+      "source": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022"
+    },
+    {
+      "id": "owasp-llm",
+      "name": "OWASP Top 10 for LLM Applications",
+      "version": "2025",
+      "source": "https://genai.owasp.org/llm-top-10/"
+    },
+    {
+      "id": "nist-ai-rmf",
+      "name": "NIST AI Risk Management Framework",
+      "version": "AI RMF 1.0 (NIST AI 100-1, January 2023)",
+      "source": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf"
+    },
+    {
+      "id": "iso42001",
+      "name": "ISO/IEC 42001 Artificial intelligence management system",
+      "version": "ISO/IEC 42001:2023, Annex A",
+      "source": "https://www.iso.org/standard/81230.html"
+    }
+  ],
+  "controls": {
+    "soc2:CC6.1": {
+      "framework": "soc2",
+      "id": "CC6.1",
+      "title": "Logical access security over protected information assets",
+      "official": "The entity implements logical access security software, infrastructure, and architectures over protected information assets to protect them from security events to meet the entity's objectives.",
+      "plain": "Only the right people and systems can reach the data this agent can touch.",
+      "source": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
+      "section": "TSP Section 100, CC6.1 (p. 28 of the March 2020 edition)"
+    },
+    "soc2:CC6.3": {
+      "framework": "soc2",
+      "id": "CC6.3",
+      "title": "Access based on roles, least privilege and segregation of duties",
+      "official": "The entity authorizes, modifies, or removes access to data, software, functions, and other protected information assets based on roles, responsibilities, or the system design and changes, giving consideration to the concepts of least privilege and segregation of duties, to meet the entity's objectives.",
+      "plain": "The agent can only use the functions its job needs, and nothing more.",
+      "source": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
+      "section": "TSP Section 100, CC6.3 (p. 30 of the March 2020 edition)"
+    },
+    "soc2:CC6.6": {
+      "framework": "soc2",
+      "id": "CC6.6",
+      "title": "Protection against threats from outside system boundaries",
+      "official": "The entity implements logical access security measures to protect against threats from sources outside its system boundaries.",
+      "plain": "Text and content coming from outside the company cannot take control of the agent.",
+      "source": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
+      "section": "TSP Section 100, CC6.6 (p. 31 of the March 2020 edition)"
+    },
+    "soc2:CC6.7": {
+      "framework": "soc2",
+      "id": "CC6.7",
+      "title": "Restricts and protects transmission, movement, and removal of information",
+      "official": "The entity restricts the transmission, movement, and removal of information to authorized internal and external users and processes, and protects it during transmission, movement, or removal to meet the entity's objectives.",
+      "plain": "Data sent to or from the agent travels over a protected connection and only to people allowed to have it.",
+      "source": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
+      "section": "TSP Section 100, CC6.7 (p. 32 of the March 2020 edition)"
+    },
+    "soc2:CC7.1": {
+      "framework": "soc2",
+      "id": "CC7.1",
+      "title": "Detection of configuration changes and susceptibility to vulnerabilities",
+      "official": "To meet its objectives, the entity uses detection and monitoring procedures to identify (1) changes to configurations that result in the introduction of new vulnerabilities, and (2) susceptibilities to newly discovered vulnerabilities.",
+      "plain": "The company checks on a schedule whether the agent can be tricked by known attack methods.",
+      "source": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
+      "section": "TSP Section 100, CC7.1 (p. 33 of the March 2020 edition)"
+    },
+    "soc2:C1.1": {
+      "framework": "soc2",
+      "id": "C1.1",
+      "title": "Identifies and maintains confidential information",
+      "official": "The entity identifies and maintains confidential information to meet the entity's objectives related to confidentiality.",
+      "plain": "Information marked confidential stays confidential, even when someone asks the agent for it.",
+      "source": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
+      "section": "TSP Section 100, C1.1 (p. 43 of the March 2020 edition); applies only when the Confidentiality category is in scope"
+    },
+    "soc2:A1.1": {
+      "framework": "soc2",
+      "id": "A1.1",
+      "title": "Manages processing capacity and capacity demand",
+      "official": "The entity maintains, monitors, and evaluates current processing capacity and use of system components (infrastructure, data, and software) to manage capacity demand and to enable the implementation of additional capacity to help meet its objectives.",
+      "plain": "The agent stays up and answers on time when traffic spikes, and floods of requests get slowed down.",
+      "source": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
+      "section": "TSP Section 100, A1.1 (p. 41 of the March 2020 edition); applies only when the Availability category is in scope"
+    },
+    "owasp-llm:LLM01": {
+      "framework": "owasp-llm",
+      "id": "LLM01:2025",
+      "title": "Prompt Injection",
+      "official": "LLM01:2025 Prompt Injection",
+      "plain": "Hidden or hostile instructions in a message or document cannot make the agent ignore its rules.",
+      "source": "https://genai.owasp.org/llmrisk/llm01-prompt-injection/"
+    },
+    "owasp-llm:LLM02": {
+      "framework": "owasp-llm",
+      "id": "LLM02:2025",
+      "title": "Sensitive Information Disclosure",
+      "official": "LLM02:2025 Sensitive Information Disclosure",
+      "plain": "The agent does not hand out personal data, secrets, or business data to people who should not see it.",
+      "source": "https://genai.owasp.org/llmrisk/llm022025-sensitive-information-disclosure/"
+    },
+    "owasp-llm:LLM06": {
+      "framework": "owasp-llm",
+      "id": "LLM06:2025",
+      "title": "Excessive Agency",
+      "official": "LLM06:2025 Excessive Agency",
+      "plain": "The agent does not have more tools, permissions, or freedom to act than its job needs, and it checks with a human before risky actions.",
+      "source": "https://genai.owasp.org/llmrisk/llm062025-excessive-agency/"
+    },
+    "owasp-llm:LLM07": {
+      "framework": "owasp-llm",
+      "id": "LLM07:2025",
+      "title": "System Prompt Leakage",
+      "official": "LLM07:2025 System Prompt Leakage",
+      "plain": "The agent will not reveal its hidden instructions, or any passwords or keys someone put in them.",
+      "source": "https://genai.owasp.org/llmrisk/llm072025-system-prompt-leakage/"
+    },
+    "owasp-llm:LLM10": {
+      "framework": "owasp-llm",
+      "id": "LLM10:2025",
+      "title": "Unbounded Consumption",
+      "official": "LLM10:2025 Unbounded Consumption",
+      "plain": "No one can run up the bill or knock the agent offline by sending it endless requests.",
+      "source": "https://genai.owasp.org/llmrisk/llm102025-unbounded-consumption/"
+    },
+    "nist-ai-rmf:MAP-3.5": {
+      "framework": "nist-ai-rmf",
+      "id": "MAP 3.5",
+      "title": "Processes for human oversight",
+      "official": "Processes for human oversight are defined, assessed, and documented in accordance with organizational policies from the GOVERN function.",
+      "plain": "A person signs off before the agent does anything that matters, and that sign-off step has been tested.",
+      "source": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf",
+      "section": "Table 2, MAP function, p. 27"
+    },
+    "nist-ai-rmf:MEASURE-2.6": {
+      "framework": "nist-ai-rmf",
+      "id": "MEASURE 2.6",
+      "title": "Regular evaluation for safety risks; fails safely",
+      "official": "The AI system is evaluated regularly for safety risks – as identified in the MAP function. The AI system to be deployed is demonstrated to be safe, its residual negative risk does not exceed the risk tolerance, and it can fail safely, particularly if made to operate beyond its knowledge limits. Safety metrics reflect system reliability and robustness, real-time monitoring, and response times for AI system failures.",
+      "plain": "The agent is tested often to show it says no to dangerous requests and stops safely when it is out of its depth.",
+      "source": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf",
+      "section": "Table 3, MEASURE function, p. 30"
+    },
+    "nist-ai-rmf:MEASURE-2.7": {
+      "framework": "nist-ai-rmf",
+      "id": "MEASURE 2.7",
+      "title": "Security and resilience are evaluated and documented",
+      "official": "AI system security and resilience – as identified in the MAP function – are evaluated and documented.",
+      "plain": "The agent has been attacked on purpose in testing, and the results are written down.",
+      "source": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf",
+      "section": "Table 3, MEASURE function, p. 30"
+    },
+    "nist-ai-rmf:MEASURE-2.10": {
+      "framework": "nist-ai-rmf",
+      "id": "MEASURE 2.10",
+      "title": "Privacy risk is examined and documented",
+      "official": "Privacy risk of the AI system – as identified in the MAP function – is examined and documented.",
+      "plain": "Someone has checked whether the agent leaks personal information, and kept a record of what they found.",
+      "source": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf",
+      "section": "Table 3, MEASURE function, p. 30"
+    },
+    "iso42001:A.6.2.4": {
+      "framework": "iso42001",
+      "id": "A.6.2.4",
+      "title": "AI system verification and validation",
+      "plain": "The agent is tested against what it is supposed to do and not do, before and after it goes live.",
+      "source": "https://www.iso.org/standard/81230.html",
+      "section": "Annex A, A.6 AI system life cycle; title verified from secondary sources only (standard is paywalled)"
+    },
+    "iso42001:A.6.2.6": {
+      "framework": "iso42001",
+      "id": "A.6.2.6",
+      "title": "AI system operation and monitoring",
+      "plain": "The running agent is watched for errors, slowdowns, and abuse, and someone acts on what they see.",
+      "source": "https://www.iso.org/standard/81230.html",
+      "section": "Annex A, A.6 AI system life cycle; title verified from secondary sources only (standard is paywalled)"
+    },
+    "iso42001:A.8.2": {
+      "framework": "iso42001",
+      "id": "A.8.2",
+      "title": "System documentation and information for users",
+      "plain": "People using the agent can see which version they are on and which tools it can use.",
+      "source": "https://www.iso.org/standard/81230.html",
+      "section": "Annex A, A.8 Information for interested parties of AI systems; title verified from secondary sources only (standard is paywalled)"
+    },
+    "iso42001:A.9.4": {
+      "framework": "iso42001",
+      "id": "A.9.4",
+      "title": "Intended use of the AI system",
+      "plain": "The agent is only used for the job it was built and documented for.",
+      "source": "https://www.iso.org/standard/81230.html",
+      "section": "Annex A, A.9 Use of AI systems; title verified from secondary sources only (standard is paywalled)"
+    }
+  },
+  "categoryMap": {
+    "data_exposure": {
+      "controls": [
+        "soc2:CC6.1",
+        "soc2:C1.1",
+        "owasp-llm:LLM02",
+        "owasp-llm:LLM07",
+        "nist-ai-rmf:MEASURE-2.10",
+        "iso42001:A.6.2.4"
+      ],
+      "why": "A probe that asks the agent for data it should not share directly tests whether access limits on that data hold (CC6.1, C1.1), whether sensitive data or hidden instructions leak (LLM02, LLM07), and gives documented privacy-risk test results (MEASURE 2.10, A.6.2.4); C1.1 only counts when Confidentiality is in the SOC 2 scope."
+    },
+    "tool_permissions": {
+      "controls": [
+        "soc2:CC6.3",
+        "owasp-llm:LLM06",
+        "nist-ai-rmf:MAP-3.5",
+        "nist-ai-rmf:MEASURE-2.7",
+        "iso42001:A.6.2.4",
+        "iso42001:A.9.4"
+      ],
+      "why": "Trying to get the agent to call tools or take actions outside its job tests least privilege (CC6.3), excessive functionality, permissions, and autonomy (LLM06), whether the human approval step works (MAP 3.5), and gives security and validation test evidence that the agent stays inside its intended use (MEASURE 2.7, A.6.2.4, A.9.4)."
+    },
+    "injection_resistance": {
+      "controls": [
+        "soc2:CC6.6",
+        "soc2:CC7.1",
+        "owasp-llm:LLM01",
+        "nist-ai-rmf:MEASURE-2.7",
+        "iso42001:A.6.2.4"
+      ],
+      "why": "Feeding the agent hostile instructions from outside sources is a direct test for prompt injection (LLM01), a recurring check for susceptibility to a known vulnerability class (CC7.1), a test of protection against threats from outside the system boundary (CC6.6), and documented security and validation evidence (MEASURE 2.7, A.6.2.4)."
+    },
+    "harmful_action_refusal": {
+      "controls": [
+        "owasp-llm:LLM06",
+        "nist-ai-rmf:MEASURE-2.6",
+        "iso42001:A.6.2.4",
+        "iso42001:A.9.4"
+      ],
+      "why": "Asking the agent to do something damaging tests whether it refuses or waits for human approval on high-impact actions (LLM06), whether it is shown to be safe and fail safely (MEASURE 2.6), and whether it holds to its intended use (A.6.2.4, A.9.4); SOC 2 is left out because no Trust Services criterion addresses an AI system refusing harmful requests, and mapping one would overstate the evidence."
+    },
+    "operational_hygiene": {
+      "controls": [
+        "soc2:CC6.7",
+        "soc2:A1.1",
+        "owasp-llm:LLM10",
+        "nist-ai-rmf:MEASURE-2.7",
+        "iso42001:A.6.2.6",
+        "iso42001:A.8.2"
+      ],
+      "why": "Checks for encrypted transport, rate limits, response time, malformed-input handling, and a published version and tool list produce evidence for protected transmission (CC6.7), capacity management (A1.1, only when Availability is in scope), limits on resource abuse (LLM10), resilience (MEASURE 2.7), operation and monitoring (A.6.2.6), and information given to users (A.8.2)."
+    }
+  }
+}

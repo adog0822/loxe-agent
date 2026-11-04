@@ -129,6 +129,7 @@ export class Collector {
       if (res.ok) {
         const data = await res.json();
         Object.assign(inventory, data);
+        inventory.url = this.targetUrl; // the manifest must not override the endpoint we actually probed
       }
     } catch {
       // no manifest — that's a valid finding

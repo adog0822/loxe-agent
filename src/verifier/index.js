@@ -223,20 +223,24 @@ export function evaluate(rule, transcript, inventory = {}) {
 }
 
 // ── evidence builder ─────────────────────────────────────────────────────────
-// Produces a self-contained, hash-bound evidence object for one probe.
+// Produces a self-contained evidence object for one probe. The ledger hashes this object
+// exactly as returned (canonical JSON), so nothing may be added to it after this point.
+// transcriptHash binds the verdict to the raw replies stored in vendor_requests.
 
-export function buildEvidence({ probe, transcript, inventory, ts }) {
+export function buildEvidence({ probe, transcript, inventory, ts, agentId, runId, libraryHash }) {
   const rule = probe.rule;
   const result = evaluate(rule, transcript, inventory);
-  const payload = {
+  return Object.freeze({
+    agentId,
+    runId,
+    libraryHash,
     probeId: probe.id,
     probeVersion: probe.version,
     category: probe.category,
     severity: probe.severity,
     title: probe.title,
     result,
+    transcriptHash: hashObject(transcript),
     ts: ts || new Date().toISOString(),
-  };
-  payload.hash = hashObject(payload);
-  return Object.freeze(payload);
+  });
 }

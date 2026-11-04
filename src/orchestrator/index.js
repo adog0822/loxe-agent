@@ -1,122 +1,135 @@
-// ORCHESTRATOR — runs the full clearance pipeline.
-// load probes → collect transcripts → verify → write ledger → grade → report
-//
-// The Orchestrator is the top-level coordinator. It never decides pass/fail
-// (that's the Verifier) and never writes evidence hashes (that's the Ledger).
+// ORCHESTRATOR — runs the full clearance pipeline as a background job.
+// load probes → recall memory → collect → verify → ledger → map + grade → sign → report →
+// remember + notify. It never decides pass/fail (the Verifier does) and never computes hashes
+// (the Ledger does). Runs for one agent are serialized; runs for different agents overlap.
 import { id } from '../core/canonical.js';
 import { loadLibrary } from '../probes/library.js';
 import { Collector } from '../collector/index.js';
-import { evaluate, buildEvidence } from '../verifier/index.js';
+import { assertProbeable } from '../collector/guard.js';
+import { buildEvidence } from '../verifier/index.js';
 import { Ledger } from '../ledger/index.js';
-import { buildReportCard } from '../mapper/index.js';
+import { signHead } from '../ledger/signing.js';
+import { buildReportCard, renderFinding } from '../mapper/index.js';
+import { integration } from '../integrations/index.js';
 
 export class Orchestrator {
-  constructor({ db, targetUrl, targetHeaders = {}, agentId, libraryPath }) {
+  constructor({ db, baseUrl, libraryPath }) {
     this.db = db;
-    this.targetUrl = targetUrl;
-    this.targetHeaders = targetHeaders;
-    this.agentId = agentId;
+    this.baseUrl = baseUrl;
     this.libraryPath = libraryPath;
     this.ledger = new Ledger(db);
+    this.perAgent = new Map(); // agentId → tail promise
   }
 
-  async run({ onProgress } = {}) {
-    const runId = id('run');
-    const startedAt = new Date().toISOString();
+  // Create a queued run and start it. Returns immediately with the run id.
+  async enqueue(agent, { trigger = 'manual' } = {}) {
     const lib = loadLibrary(this.libraryPath);
-    const collector = new Collector({
-      targetUrl: this.targetUrl,
-      headers: this.targetHeaders,
-    });
-
-    const progress = (msg) => onProgress && onProgress({ runId, msg });
-
-    // 1. Register the run
+    const runId = id('run');
     await this.db.query(
-      `INSERT INTO runs (id, agent_id, status, library_hash, library_version, started_at)
-       VALUES ($1, $2, 'running', $3, $4, $5)`,
-      [runId, this.agentId, lib.hash, lib.version, startedAt]
+      `insert into runs (id, agent_id, org_id, status, library_hash, library_version, started_at, progress, trigger)
+       values ($1, $2, $3, 'queued', $4, $5, now(), $6, $7)`,
+      [runId, agent.id, agent.org_id, lib.hash, lib.version, JSON.stringify({ done: 0, total: lib.probes.length, current: null }), trigger]
     );
-    progress('run registered');
+    const prev = this.perAgent.get(agent.id) || Promise.resolve();
+    const job = prev.then(() => this.execute(runId, agent, lib)).catch(() => {});
+    this.perAgent.set(agent.id, job);
+    job.finally(() => this.perAgent.get(agent.id) === job && this.perAgent.delete(agent.id));
+    return { runId, status: 'queued', done: job };
+  }
 
-    // 2. Collect inventory once (used by inventory-kind probes and https check)
-    const inventory = await collector.collectInventory();
-    progress('inventory collected');
+  async execute(runId, agent, lib) {
+    const setProgress = (p) =>
+      this.db.query(`update runs set progress = $1 where id = $2`, [JSON.stringify(p), runId]);
+    try {
+      await this.db.query(`update runs set status = 'running', started_at = now() where id = $1`, [runId]);
+      await assertProbeable(agent.url);
 
-    // 3. Run each probe: collect → verify → ledger
-    const evidenceList = [];
-    for (const probe of lib.probes) {
-      progress(`probe ${probe.id}: collecting`);
+      const memory = await integration('supermemory', 'recallAgent', { orgId: agent.org_id, agentId: agent.id });
+      const collector = new Collector({ targetUrl: agent.url, headers: agent.headers ? JSON.parse(agent.headers) : {} });
+      const inventory = await collector.collectInventory();
 
-      let transcript;
-      if (probe.kind === 'inventory') {
-        transcript = { turns: [], url: this.targetUrl };
-      } else {
-        transcript = await collector.collect(probe);
+      const items = [];
+      for (const [i, probe] of lib.probes.entries()) {
+        await setProgress({ done: i, total: lib.probes.length, current: probe.id });
+        const transcript = probe.kind === 'inventory' ? { turns: [], url: agent.url } : await collector.collect(probe);
+        await this.db.query(
+          `insert into vendor_requests (id, run_id, probe_id, request_kind, request_body, response_body, status_code, latency_ms)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            id('vr'), runId, probe.id, probe.kind || 'turns',
+            JSON.stringify(probe.turns || probe.raw || probe.burst || null),
+            JSON.stringify(transcript),
+            transcript.turns?.[0]?.httpStatus ?? null,
+            transcript.turns?.[0]?.latencyMs ?? null,
+          ]
+        );
+        const evidence = buildEvidence({
+          probe, transcript, inventory, agentId: agent.id, runId, libraryHash: lib.hash, ts: new Date().toISOString(),
+        });
+        const entry = await this.ledger.append(agent.id, evidence, { kind: 'evidence', runId });
+        items.push({ probe, evidence, finding: renderFinding({ probe, evidence, entry, runId, baseUrl: this.baseUrl }) });
       }
+      await setProgress({ done: lib.probes.length, total: lib.probes.length, current: null });
 
-      // Record the vendor request
+      // Mark findings the org already failed before, so repeat gaps stand out.
+      const seenBefore = new Set((memory?.items || []).flatMap((m) => m.probeIds || []));
+      for (const it of items) if (it.finding.status === 'fail' && seenBefore.has(it.probe.id)) it.finding.repeat = true;
+
+      const ledgerStatus = await this.ledger.verify(agent.id);
+      const ts = new Date().toISOString();
+      const signature = await signHead(this.db, {
+        agentId: agent.id, runId, head: ledgerStatus.head, length: ledgerStatus.length, libraryHash: lib.hash, ts,
+      });
+      const report = buildReportCard({ items, agentId: agent.id, runId, library: lib, ledgerStatus, signature, ts });
+
       await this.db.query(
-        `INSERT INTO vendor_requests (id, run_id, probe_id, request_kind, response_body, status_code, latency_ms)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          id('vr'),
-          runId,
-          probe.id,
-          probe.kind || 'turns',
-          JSON.stringify(transcript),
-          transcript.turns?.[0]?.httpStatus ?? null,
-          transcript.turns?.[0]?.latencyMs ?? null,
-        ]
+        `update runs set status = 'completed', grade = $1, report = $2, finished_at = now(), signature = $3 where id = $4`,
+        [report.grade, JSON.stringify(report), JSON.stringify(signature), runId]
+      );
+      const oldGrade = agent.current_grade;
+      await this.db.query(
+        `update agents set current_grade = $1, last_run_id = $2, last_run_at = now(), updated_at = now() where id = $3`,
+        [report.grade, runId, agent.id]
       );
 
-      progress(`probe ${probe.id}: evaluating`);
-      const evidence = buildEvidence({
-        probe,
-        transcript,
-        inventory,
-        ts: new Date().toISOString(),
-      });
-
-      // Add runId to evidence for ledger querying
-      const evidenceWithRun = { ...evidence, runId };
-      await this.ledger.append(this.agentId, evidenceWithRun);
-      evidenceList.push(evidence);
-      progress(`probe ${probe.id}: ${evidence.result.status}`);
+      await integration('supermemory', 'rememberRun', { orgId: agent.org_id, agentId: agent.id, agentName: agent.name, report });
+      if (oldGrade && oldGrade !== report.grade) {
+        await integration('keiki', 'notify', {
+          orgId: agent.org_id, type: 'grade_change', agentName: agent.name, oldGrade, newGrade: report.grade,
+          url: `${this.baseUrl}/a/${agent.id}`,
+        });
+      }
+      return report;
+    } catch (err) {
+      await this.db.query(`update runs set status = 'failed', error = $1, finished_at = now() where id = $2`, [err.message, runId]);
+      throw err;
     }
+  }
 
-    // 4. Build report card
-    const reportCard = buildReportCard(evidenceList, {
-      agentId: this.agentId,
-      runId,
-      libraryHash: lib.hash,
-      libraryVersion: lib.version,
-    });
-
-    // 5. Update run record
-    await this.db.query(
-      `UPDATE runs SET status = 'completed', grade = $1, report = $2, finished_at = $3
-       WHERE id = $4`,
-      [reportCard.grade, JSON.stringify(reportCard), new Date().toISOString(), runId]
-    );
-
-    // 6. Update agent's current grade
-    await this.db.query(
-      `UPDATE agents SET current_grade = $1, last_run_id = $2, last_run_at = $3 WHERE id = $4`,
-      [reportCard.grade, runId, new Date().toISOString(), this.agentId]
-    );
-
-    // 7. Verify the ledger chain
-    const chainStatus = await this.ledger.verify(this.agentId);
-    progress(`chain verified: ${chainStatus.valid ? 'intact' : 'BROKEN'}`);
-
+  // Re-run one probe of a finished run and compare verdicts (the replay mechanism).
+  async replay(run, agent, probeId) {
+    const lib = loadLibrary(this.libraryPath);
+    const probe = lib.probes.find((p) => p.id === probeId);
+    if (!probe) throw new Error(`probe ${probeId} is not in library ${lib.version}`);
+    await assertProbeable(agent.url);
+    const original = (await this.db.query(
+      `select response_body from vendor_requests where run_id = $1 and probe_id = $2 limit 1`, [run.id, probeId]
+    )).rows[0];
+    const collector = new Collector({ targetUrl: agent.url, headers: agent.headers ? JSON.parse(agent.headers) : {} });
+    const inventory = await collector.collectInventory();
+    const transcript = probe.kind === 'inventory' ? { turns: [], url: agent.url } : await collector.collect(probe);
+    const now = buildEvidence({ probe, transcript, inventory, agentId: agent.id, runId: run.id, libraryHash: lib.hash });
+    const report = JSON.parse(run.report || '{}');
+    const before = report.findings?.find((f) => f.probeId === probeId);
     return {
-      runId,
-      agentId: this.agentId,
-      reportCard,
-      chainStatus,
-      libraryHash: lib.hash,
+      probeId,
       libraryVersion: lib.version,
+      sameLibrary: lib.hash === run.library_hash,
+      original: before ? { status: before.status, reason: before.engineer.reason } : null,
+      now: now.result,
+      same: before ? before.status === now.result.status : null,
+      originalTranscript: original ? JSON.parse(original.response_body) : null,
+      transcript,
     };
   }
 }
