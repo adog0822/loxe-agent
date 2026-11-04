@@ -1,0 +1,22 @@
+{
+  "name": "loxe",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "private": "true",
+  "dependencies": {
+    "@hono/node-server": "^2.1.6",
+    "hono": "^4.13.16",
+    "maritime-sdk": "^0.11.0",
+    "pdfkit": "^0.20.2",
+    "pg": "^8.23.1",
+    "supermemory": "^5.1.2"
+  }
+}
