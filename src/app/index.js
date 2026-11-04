@@ -19,6 +19,7 @@ import { clearancePage } from '../reporter/page.js';
 import { createSentinel } from '../sentinel/index.js';
 import { integration, integrationStatus } from '../integrations/index.js';
 import { createDemo } from '../demo/index.js';
+import { sealJson } from '../db/crypto.js';
 import { demoFetch } from '../../demo/target-agent.js';
 import { buildOwlMessages, askViaRest, OWL_MODEL } from '../guide/index.js';
 
@@ -50,6 +51,7 @@ export function createApp({ db, baseUrl }) {
         ? (await db.query(`select status from runs where id = $1`, [a.last_run_id])).rows[0]?.status || null
         : null,
       lastRunAt: a.last_run_at || null,
+      public: a.is_public,
       sentinel: { enabled: a.sentinel_enabled, intervalHours: a.sentinel_interval_hours, nextRunAt: a.sentinel_next_run_at || null },
       chain: { valid: chain.valid, length: chain.length, head: chain.head },
       createdAt: a.created_at,
@@ -275,7 +277,7 @@ export function createApp({ db, baseUrl }) {
     await db.query(
       `insert into agents (id, name, url, headers, owner_id, org_id, source, maritime_agent_id)
        values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [agentId, String(name).slice(0, 120), url, JSON.stringify(headers || {}), c.get('auth').user.id, org(c), source, maritimeAgentId || null]
+      [agentId, String(name).slice(0, 120), url, await sealJson(db, headers || {}), c.get('auth').user.id, org(c), source, maritimeAgentId || null]
     );
     return c.json(await agentView(await agentRow(agentId)), 201);
   });
@@ -285,9 +287,23 @@ export function createApp({ db, baseUrl }) {
     return a ? c.json(await agentView(a)) : c.json({ error: 'not found' }, 404);
   });
 
+  // Delete: transcripts, decision notes and the stored auth header go; ledger hashes stay so
+  // reports already shared still verify.
   api.delete('/agents/:id', async (c) => {
-    await db.query(`update agents set archived_at = now() where id = $1 and org_id = $2`, [c.req.param('id'), org(c)]);
+    const a = await agentRow(c.req.param('id'), org(c));
+    if (!a) return c.json({ error: 'not found' }, 404);
+    await db.query(`delete from vendor_requests where run_id in (select id from runs where agent_id = $1)`, [a.id]);
+    await db.query(`update decisions set note = '', by_label = 'deleted' where agent_id = $1`, [a.id]);
+    await db.query(`update agents set archived_at = now(), headers = null, is_public = false, sentinel_enabled = false where id = $1`, [a.id]);
     return c.body(null, 204);
+  });
+
+  api.post('/agents/:id/visibility', async (c) => {
+    const a = await agentRow(c.req.param('id'), org(c));
+    if (!a) return c.json({ error: 'not found' }, 404);
+    const { public: pub } = await c.req.json().catch(() => ({}));
+    await db.query(`update agents set is_public = $1, updated_at = now() where id = $2`, [!!pub, a.id]);
+    return c.json({ public: !!pub });
   });
 
   api.post('/agents/:id/runs', async (c) => {

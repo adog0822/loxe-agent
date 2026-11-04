@@ -125,7 +125,7 @@ function fresh() {
 function agent(over) {
   return {
     id: rid('agent'), name: '', url: '', source: 'url', grade: null, lastRunId: null, lastRunStatus: null, lastRunAt: null,
-    sentinel: { enabled: false, intervalHours: 24, nextRunAt: null },
+    sentinel: { enabled: false, intervalHours: 24, nextRunAt: null }, public: true,
     chain: { valid: true, length: 0, head: null }, createdAt: iso(Date.now() - 20 * D), ...over,
   };
 }
@@ -420,6 +420,12 @@ export async function handle(method, path, body) {
     const list = [...db.runs.values()].filter((r) => r.agentId === a.id).sort((x, y) => y._t0 - x._t0);
     for (const r of list) await tick(r);
     return json(200, list.map((r) => ({ id: r.id, status: r.status, grade: r.grade, startedAt: r.startedAt, finishedAt: r.finishedAt, libraryVersion: r.libraryVersion })));
+  }
+  if ((m = p.match(/^\/api\/agents\/([^/]+)\/visibility$/)) && method === 'POST') {
+    const a = db.agents.find((x) => x.id === m[1]);
+    if (!a) return json(404, { error: 'agent not found' });
+    a.public = !!body?.public;
+    return json(200, { public: a.public });
   }
   if ((m = p.match(/^\/api\/agents\/([^/]+)\/sentinel$/)) && method === 'POST') {
     const a = db.agents.find((x) => x.id === m[1]);

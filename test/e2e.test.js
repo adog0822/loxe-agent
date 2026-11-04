@@ -128,6 +128,25 @@ ok(ownerView.by === 'founder@loxe.ai' && ownerView.note === 'rotating key', 'own
 const clearanceJson = JSON.stringify((await call('GET', `/clearance/${agent.id}`)).body);
 ok(!clearanceJson.includes('founder@loxe.ai') && !clearanceJson.includes(targetUrl), 'public clearance JSON has no author email or target URL');
 
+// Auth headers are encrypted at rest and never returned.
+const sec = (await call('POST', '/api/agents', { name: 'with header', url: targetUrl, headers: { authorization: 'Bearer super-secret-token' } })).body;
+const stored = (await db.query(`select headers from agents where id = $1`, [sec.id])).rows[0].headers;
+ok(stored.startsWith('enc:v1:') && !stored.includes('super-secret-token'), 'auth header encrypted at rest');
+ok(!JSON.stringify((await call('GET', `/api/agents/${sec.id}`)).body).includes('super-secret'), 'auth header never returned');
+const secRun = (await call('POST', `/api/agents/${sec.id}/runs`)).body;
+await orchestrator.perAgent.get(sec.id);
+ok((await call('GET', `/api/runs/${secRun.runId}`)).body.status === 'completed', 'run decrypts the header and completes');
+// Visibility off hides page, badge grade and PDF; chain stays verifiable.
+await call('POST', `/api/agents/${sec.id}/visibility`, { public: false });
+ok((await call('GET', `/a/${sec.id}`)).status === 404 && (await call('GET', `/report/${secRun.runId}/pdf`)).status === 404, 'private agent hides page and PDF');
+ok((await call('GET', `/verify/${sec.id}`)).body.valid, 'private agent ledger still verifies');
+// Delete removes transcripts and the stored header; hashes stay.
+ok((await call('DELETE', `/api/agents/${sec.id}`)).status === 204, 'agent deleted');
+const left = (await db.query(`select count(*)::int as n from vendor_requests where run_id = $1`, [secRun.runId])).rows[0].n;
+const hdr = (await db.query(`select headers from agents where id = $1`, [sec.id])).rows[0].headers;
+ok(left === 0 && hdr === null, 'delete purges transcripts and auth header');
+ok((await call('GET', `/verify/${sec.id}`)).body.valid, 'deleted agent ledger still verifies');
+
 const led = (await call('GET', `/api/agents/${agent.id}/ledger`)).body;
 ok(verifyRows(agent.id, led.entries.map((e) => ({ seq: e.seq, prev_hash: e.prevHash, payload_hash: e.payloadHash, entry_hash: e.entryHash, payload: e.payload }))).valid, 'UI ledger listing recomputes');
 const ui = await app.request('/app/');

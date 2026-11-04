@@ -1,6 +1,6 @@
 // Share: public clearance page, badge embed, PDF. Plus what the claim says and does not say.
-import { badgeSrc, publicUrl, isDemo } from '../api.js';
-import { setContext } from '../owl.js';
+import { api, badgeSrc, publicUrl, isDemo } from '../api.js';
+import { setContext, say } from '../owl.js';
 import { html, $, $$, mark, h1, day, word, esc } from '../ui.js';
 import { agentHeader, bindRunButtons, loadAgent, loadReport, openFails } from './common.js';
 
@@ -31,15 +31,17 @@ export async function render(main, ctx) {
       <div class="split split--60">
         <div class="side">
           <div class="panel">
-            <h2 class="h3">Public clearance page</h2>
+            <div class="section-head"><h2 class="h3">Public clearance page</h2>
+              <label class="switch"><input type="checkbox" id="pub" ${agent.public === false ? '' : 'checked'}> <span id="pub-l">${agent.public === false ? 'Public link: off' : 'Public link: on'}</span></label></div>
             <p class="body">Anyone with the link can open it. It shows no headers, keys or transcripts.</p>
-            <div class="copyfield"><input class="input" readonly value="${page}" aria-label="Public page URL"><button class="btn btn--primary" data-copy="${page}" data-copy-label="Page link copied" data-autofocus>Copy link</button></div>
+            <p class="hint">Off hides the page, badge and PDF. The ledger hashes stay verifiable.</p>
+            <div class="copyfield sharebody"><input class="input" readonly value="${page}" aria-label="Public page URL"><button class="btn btn--primary" data-copy="${page}" data-copy-label="Page link copied" data-autofocus>Copy link</button></div>
             <div class="row" style="margin-top:var(--s3)"><a class="link" href="${page}" target="_blank" rel="noopener">Open the public page</a>${isDemo() ? html`<span class="small">In the demo there is no server behind this link.</span>` : ''}</div>
           </div>
           <div class="panel">
             <h2 class="h3">Badge</h2>
             <p class="body">It updates on every run, so it never shows a grade the agent no longer has.</p>
-            <div class="badgebox" style="margin-top:var(--s3)"><a href="${page}" target="_blank" rel="noopener"><img src="${src}" alt="Loxe clearance badge for ${agent.name}" height="24"></a></div>
+            <div class="badgebox sharebody" style="margin-top:var(--s3)"><a href="${page}" target="_blank" rel="noopener"><img src="${src}" alt="Loxe clearance badge for ${agent.name}" height="24"></a></div>
             <div style="margin-top:var(--s4)">
               <div class="seg" role="group" aria-label="Snippet format" id="fmt"><button type="button" data-v="md" aria-pressed="true">Markdown</button><button type="button" data-v="html" aria-pressed="false">HTML</button></div>
               <pre class="raw" id="snippet">${snippets.md}</pre>
@@ -77,6 +79,20 @@ export async function render(main, ctx) {
     $$('#fmt button', main).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     $('#snippet', main).textContent = snippets[fmt];
   }));
+  const pub = $('#pub', main);
+  const paintPub = (on) => { $('#pub-l', main).textContent = on ? 'Public link: on' : 'Public link: off'; main.querySelectorAll('.sharebody').forEach((el) => el.classList.toggle('is-off', !on)); };
+  paintPub(pub?.checked ?? true);
+  pub?.addEventListener('change', async () => {
+    pub.disabled = true;
+    const want = pub.checked;
+    try {
+      const r = await api.visibility(agent.id, want);
+      const on = r?.public ?? want;
+      pub.checked = on; paintPub(on);
+      say(on ? 'Public link on. The page, badge and PDF are reachable again.' : 'Public link off. The page, badge and PDF now return nothing; the ledger hashes still verify.');
+    } catch (e) { pub.checked = !want; paintPub(!want); say(''); import('../ui.js').then((u) => u.toast(`Not changed: ${e.message}`, 'gap')); }
+    pub.disabled = false;
+  });
   $('#copysnip', main)?.addEventListener('click', () => import('../ui.js').then((u) => u.copy(snippets[fmt], 'Snippet copied')));
 }
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);

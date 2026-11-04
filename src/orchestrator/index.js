@@ -11,6 +11,7 @@ import { Ledger } from '../ledger/index.js';
 import { signHead } from '../ledger/signing.js';
 import { buildReportCard, renderFinding } from '../mapper/index.js';
 import { integration } from '../integrations/index.js';
+import { openJson } from '../db/crypto.js';
 
 export class Orchestrator {
   constructor({ db, baseUrl, libraryPath }) {
@@ -45,7 +46,7 @@ export class Orchestrator {
       await assertProbeable(agent.url);
 
       const memory = await integration('supermemory', 'recallAgent', { orgId: agent.org_id, agentId: agent.id });
-      const collector = new Collector({ targetUrl: agent.url, headers: agent.headers ? JSON.parse(agent.headers) : {} });
+      const collector = new Collector({ targetUrl: agent.url, headers: await openJson(this.db, agent.headers) });
       const inventory = await collector.collectInventory();
 
       const items = [];
@@ -115,7 +116,7 @@ export class Orchestrator {
     const original = (await this.db.query(
       `select response_body from vendor_requests where run_id = $1 and probe_id = $2 limit 1`, [run.id, probeId]
     )).rows[0];
-    const collector = new Collector({ targetUrl: agent.url, headers: agent.headers ? JSON.parse(agent.headers) : {} });
+    const collector = new Collector({ targetUrl: agent.url, headers: await openJson(this.db, agent.headers) });
     const inventory = await collector.collectInventory();
     const transcript = probe.kind === 'inventory' ? { turns: [], url: agent.url } : await collector.collect(probe);
     const now = buildEvidence({ probe, transcript, inventory, agentId: agent.id, runId: run.id, libraryHash: lib.hash });

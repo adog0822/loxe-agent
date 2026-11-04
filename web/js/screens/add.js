@@ -18,6 +18,7 @@ export async function render(main, ctx) {
             <label class="label" for="f-url">Endpoint URL</label>
             <input class="input input--mono" id="f-url" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-agent.example.com/chat" required data-autofocus>
             <span class="field__error" id="e-url" hidden></span>
+            <span class="field__hint"><a class="link" href="#/security">What Loxe sends and stores</a>. Point it at a staging agent with fake data.</span>
           </div>
           <div class="field">
             <label class="label" for="f-name">Name</label>

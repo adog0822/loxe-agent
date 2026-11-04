@@ -76,6 +76,7 @@ export const api = {
   startRun: (id) => request('POST', `/api/agents/${id}/runs`),
   runs: (id) => request('GET', `/api/agents/${id}/runs`),
   sentinel: (id, body) => request('POST', `/api/agents/${id}/sentinel`, body),
+  visibility: (id, isPublic) => request('POST', `/api/agents/${id}/visibility`, { public: isPublic }),
   run: (id) => request('GET', `/api/runs/${id}`),
   decide: (runId, probeId, state, note) => request('POST', `/api/runs/${runId}/findings/${encodeURIComponent(probeId)}/decision`, { state, note }),
   integrations: () => request('GET', '/api/integrations'),

@@ -60,6 +60,8 @@ Shape carries meaning before colour, so the marks survive greyscale and colour b
 - The owl button sits bottom right on every screen. It opens a side panel (a bottom sheet on phones) with
   questions written for the current screen, free-text questions to `POST /api/owl`, and the demo tour.
   `say()` is its one-line narration of whatever the app is doing (sending a probe, writing a decision).
+- Why Loxe (`#/why`) and Security (`#/security`) are open without sign-in and linked from the nav, the account menu,
+  Add agent and the first-agent prompt. Share has a "Public link: on/off" switch (`POST /api/agents/:id/visibility`).
 - First sign-in: the owl asks three questions (where the agent lives, frameworks, alerts), stored per user
   in localStorage, then offers one move: "Test my agent" with the URL field right there.
 

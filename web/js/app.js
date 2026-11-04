@@ -16,6 +16,7 @@ const ROUTES = [
   [/^connect$/, () => import('./screens/connect.js')],
   [/^welcome$/, () => import('./screens/welcome.js')],
   [/^why$/, () => import('./screens/why.js')],
+  [/^security$/, () => import('./screens/security.js')],
   [/^signin$/, () => import('./screens/signin.js')],
   [/^agents\/([^/]+)$/, () => import('./screens/agent.js')],
   [/^agents\/([^/]+)\/report$/, () => import('./screens/report.js')],
@@ -68,7 +69,7 @@ function shell() {
           <a href="#/add" data-nav="add">Add agent</a>
           <a href="#/connect" data-nav="connect">Connect</a>
         </nav>
-        <a class="navquiet" href="#/why" data-nav="why">What is Loxe</a>
+        <span class="navquiets"><a class="navquiet" href="#/why" data-nav="why">What is Loxe</a><a class="navquiet" href="#/security" data-nav="security">Security</a></span>
         <div class="bar__right">
           <label class="demotoggle" title="Switch to a guided demo with sample data"><input type="checkbox" id="demo-switch"> <span>Demo</span></label>
           <div class="menu" id="usermenu">
@@ -76,6 +77,7 @@ function shell() {
             <div class="menu__list" id="menu-list" role="menu" hidden>
               <div class="menu__who" id="who"></div>
               <a role="menuitem" href="#/why">What is Loxe</a>
+              <a role="menuitem" href="#/security">Security and data</a>
               <a role="menuitem" href="#/integrations">Integrations and settings</a>
               <a role="menuitem" href="#/connect">API keys and CLI</a>
               <button role="menuitem" type="button" id="theme"></button>
@@ -186,13 +188,13 @@ async function route() {
   cleanups.forEach((fn) => { try { fn(); } catch {} });
   cleanups = [];
   const { path, query } = parseHash();
-  if (!session.user && path !== 'signin' && path !== 'why') {
+  if (!session.user && !['signin', 'why', 'security'].includes(path)) {
     if (isDemo()) { await enterDemo(); return; }
     go(`#/signin?next=${encodeURIComponent(location.hash || '#/')}`);
     return;
   }
   // First sign-in: the owl asks three questions before anything else.
-  if (session.user && !isDemo() && !['welcome', 'signin', 'why'].includes(path) && !getPrefs(session.user.id)) {
+  if (session.user && !isDemo() && !['welcome', 'signin', 'why', 'security'].includes(path) && !getPrefs(session.user.id)) {
     go('#/welcome');
     return;
   }

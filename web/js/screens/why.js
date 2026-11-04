@@ -58,7 +58,7 @@ export async function render(main, ctx) {
         <div>
           <h2 class="h2">How the proof works</h2>
           <ol class="steps">${STEPS.map((s, i) => html`<li><span class="steps__n">${i + 1}</span><span>${s}</span></li>`)}</ol>
-          <button class="linkbtn" type="button" data-why="ledger" style="margin-top:var(--s5)">Verify a real ledger</button>
+          <div class="row row--l" style="margin-top:var(--s5)"><button class="linkbtn" type="button" data-why="ledger">Verify a real ledger</button><a class="link" href="#/security">How we handle your data</a></div>
         </div>
         <figure class="chainfig" aria-label="Three ledger entries, each linked to the one before">
           ${chain.map((e, i) => html`
