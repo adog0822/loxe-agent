@@ -1,0 +1,26 @@
+// Loxe on Cloudflare: a Worker in front of one Loxe container (the Node server in ../Dockerfile).
+// The Worker owns the domain, the hourly sentinel cron and the owl guide (Workers AI);
+// everything else is proxied to the container. Secrets: `wrangler secret put <NAME>`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "loxe",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [{ "pattern": "loxeagent.loxeai.com", "custom_domain": true }],
+  "containers": [
+    {
+      "class_name": "LoxeContainer",
+      "image": "../Dockerfile",
+      "image_build_context": "..",
+      "instance_type": "standard-1",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": { "bindings": [{ "name": "LOXE", "class_name": "LoxeContainer" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LoxeContainer"] }],
+  "ai": { "binding": "AI" },
+  "triggers": { "crons": ["0 * * * *"] },
+  "vars": { "LOXE_BASE_URL": "https://loxeagent.loxeai.com" },
+  "observability": { "enabled": true }
+}

@@ -17,6 +17,7 @@ import { generateBadge } from '../reporter/badge.js';
 import { clearancePage } from '../reporter/page.js';
 import { createSentinel } from '../sentinel/index.js';
 import { integration, integrationStatus } from '../integrations/index.js';
+import { buildOwlMessages, askViaRest, OWL_MODEL } from '../guide/index.js';
 
 export function createApp({ db, baseUrl }) {
   const app = new Hono();
@@ -370,6 +371,35 @@ export function createApp({ db, baseUrl }) {
     return c.json((await integration('supermemory', 'recallAgent', { orgId: org(c), agentId: a.id })) || { items: [] });
   });
   api.get('/controls', (c) => c.json(controlsTable()));
+
+  // Owl guide. /owl/context is what the Cloudflare Worker calls before running Workers AI;
+  // /owl answers directly when this server has Workers AI REST credentials (local dev).
+  async function owlMessages(c) {
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.question) return { error: 'question is required' };
+    const ctx = body.context || {};
+    let run = null;
+    if (ctx.runId) run = (await db.query(`select * from runs where id = $1 and org_id = $2`, [ctx.runId, org(c)])).rows[0];
+    else if (ctx.agentId) {
+      const a = await agentRow(ctx.agentId, org(c));
+      if (a?.last_run_id) run = (await db.query(`select * from runs where id = $1`, [a.last_run_id])).rows[0];
+    }
+    return { messages: buildOwlMessages({ question: body.question, route: ctx.route, run: run && runView(run), probeId: ctx.probeId }) };
+  }
+  api.post('/owl/context', async (c) => {
+    const m = await owlMessages(c);
+    return m.error ? c.json(m, 400) : c.json({ model: OWL_MODEL, ...m });
+  });
+  api.post('/owl', async (c) => {
+    const m = await owlMessages(c);
+    if (m.error) return c.json(m, 400);
+    try {
+      const answer = await askViaRest(m.messages);
+      return answer ? c.json({ answer }) : c.json({ error: 'guide unavailable: no model configured on this server' }, 503);
+    } catch (err) {
+      return c.json({ error: `guide unavailable: ${err.message}` }, 503);
+    }
+  });
 
   app.route('/api', api);
 

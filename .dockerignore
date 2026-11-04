@@ -1,5 +1,10 @@
 node_modules
+**/node_modules
 .env*
 .git
 *.log
 .data
+cloudflare
+keiki-agent
+test
+.claude
