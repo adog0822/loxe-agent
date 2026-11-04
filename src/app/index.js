@@ -19,10 +19,42 @@ export function createApp(config = {}) {
 
   app.use('*', cors());
 
-  // ── Health ───────────────────────────────────────────────────────────────
+  // ── Health (Maritime contract: GET /health → 2xx) ────────────────────────
   app.get('/', (c) =>
     c.json({ name: 'loxe', version: '0.1.0', status: 'ok' })
   );
+  app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  // ── Maritime chat contract (POST /chat) ─────────────────────────────────
+  app.post('/chat', async (c) => {
+    const body = await c.req.json();
+    const msg = (body.message || '').trim().toLowerCase();
+
+    // Simple command router for Maritime / Keiki integration
+    if (msg.startsWith('run clearance')) {
+      const agentId = msg.replace('run clearance', '').trim();
+      if (!agentId) return c.json({ response: 'Usage: run clearance <agent-id>' });
+      const res = await pool.query('SELECT id, url FROM agents WHERE id = $1', [agentId]);
+      if (res.rows.length === 0) return c.json({ response: `Agent ${agentId} not found. Use "list agents" to see registered agents.` });
+      const agent = res.rows[0];
+      const orchestrator = new Orchestrator({ db: pool, targetUrl: agent.url, agentId: agent.id });
+      const result = await orchestrator.run({});
+      return c.json({ response: `Clearance run complete for ${agentId}. Grade: ${result.reportCard.grade}. Run ID: ${result.runId}` });
+    }
+
+    if (msg === 'list agents') {
+      const res = await pool.query('SELECT id, name, current_grade, last_run_at FROM agents ORDER BY name');
+      if (res.rows.length === 0) return c.json({ response: 'No agents registered. POST /agents to register one.' });
+      const list = res.rows.map(a => `• ${a.name} (${a.id}) — grade: ${a.current_grade || 'ungraded'}`).join('\n');
+      return c.json({ response: `Registered agents:\n${list}` });
+    }
+
+    if (msg === 'help') {
+      return c.json({ response: 'Loxe commands: "list agents", "run clearance <agent-id>", "help". API: POST /agents, POST /agents/:id/run, GET /clearance/:id' });
+    }
+
+    return c.json({ response: 'Loxe — deterministic agent clearance. Commands: "list agents", "run clearance <agent-id>", "help"' });
+  });
 
   // ── Agent registration ───────────────────────────────────────────────────
   app.post('/agents', async (c) => {
