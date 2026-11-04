@@ -22,6 +22,7 @@ export function firstAgentForm(prefs = {}, { compact = false } = {}) {
       <p class="field__error" id="fa-err" hidden></p>
       ${note ? html`<p class="hint">${note}</p>` : ''}
       ${endpointHelp()}
+      <p class="hint">No URL, like an agent in iMessage or an app? <a class="link" href="#/add?hand=1">Test it by hand</a>.</p>
       <p class="hint"><a class="link" href="#/security">What Loxe sends and stores</a>. Use a staging agent: some tests ask it to delete records or send email.</p>
     </form>`;
 }

@@ -198,7 +198,7 @@ function rosterRow(x) {
   const href = running ? `#/runs/${r.id}` : `#/agents/${a.id}/report`;
   return html`<tr data-href="${href}">
     <td class="c-seal">${seal(a.grade, { size: 's', stale, running })}</td>
-    <td><a class="roster__name" href="${href}">${a.name}</a><span class="roster__url">${a.url}</span></td>
+    <td><a class="roster__name" href="${href}">${a.name}</a><span class="roster__url">${a.source === 'hand' ? `By hand, ${a.where}` : a.url}</span></td>
     <td>${lastRun}</td>
     <td><span class="statusline">${stale ? html`${mark('stale', { size: 's' })}<span class="t-stale">${ago(a.lastRunAt)}</span>` : running ? html`<span data-live="${r.id}">${r.progress.done} of ${r.progress.total}</span>` : ago(a.lastRunAt)}</span></td>
     <td><span class="statusline">${a.sentinel?.enabled ? html`${mark('ok', { size: 's' })}Every ${a.sentinel.intervalHours}h` : html`${mark('off', { size: 's' })}Off`}</span></td>

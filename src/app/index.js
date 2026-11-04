@@ -47,7 +47,8 @@ export function createApp({ db, baseUrl }) {
     return {
       id: a.id,
       name: a.name,
-      url: a.url,
+      url: a.source === 'hand' ? null : a.url,
+      where: a.source === 'hand' ? a.url.slice(5) : undefined,
       source: a.source,
       maritimeAgentId: a.maritime_agent_id || undefined,
       grade: a.current_grade || null,
@@ -316,7 +317,21 @@ export function createApp({ db, baseUrl }) {
 
   api.post('/agents', async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    let { name, url, headers, source = 'url', maritimeAgentId } = body;
+    let { name, url, headers, source = 'url', maritimeAgentId, where } = body;
+    // An agent with no URL (an app, iMessage): the owner pastes replies by hand.
+    if (source === 'hand') {
+      if (!name) return c.json({ error: 'name is required' }, 400);
+      const n = (await db.query(`select count(*)::int as n from agents where org_id = $1 and archived_at is null`, [org(c)])).rows[0].n;
+      if (n >= 50) return c.json({ error: 'limit of 50 agents per organization reached' }, 429);
+      const agentId = id('agent');
+      const place = String(where || '').replace(/[^\w .,'&()+-]/g, '').trim().slice(0, 60) || 'an app';
+      await db.query(
+        `insert into agents (id, name, url, headers, owner_id, org_id, source) values ($1, $2, $3, null, $4, $5, 'hand')`,
+        [agentId, String(name).slice(0, 120), `hand:${place}`, c.get('auth').user.id, org(c)]
+      );
+      return c.json(await agentView(await agentRow(agentId)), 201);
+    }
+    if (!['url', 'maritime'].includes(source)) return c.json({ error: 'source must be url, maritime or hand' }, 400);
     if (maritimeAgentId && !maritimeAllowed(org(c))) return c.json({ error: 'Maritime intake is not enabled for this organization; paste the agent URL instead' }, 403);
     if (source === 'maritime' && maritimeAgentId && !url) {
       const m = await integration('maritime', 'getAgent', maritimeAgentId);
@@ -372,6 +387,11 @@ export function createApp({ db, baseUrl }) {
     const active = (await db.query(
       `select id from runs where org_id = $1 and status in ('queued', 'running') order by started_at desc`, [org(c)]
     )).rows;
+    if (a.source === 'hand') {
+      const open = (await db.query(`select id from runs where agent_id = $1 and status = 'awaiting_replies' order by started_at desc limit 1`, [a.id])).rows[0];
+      if (open) return c.json({ runId: open.id, status: 'awaiting_replies' }, 202);
+      return c.json(await orchestrator.startHand(a), 202);
+    }
     if (active.length >= 3) return c.json({ error: 'three runs are already going for this organization; wait for one to finish', runId: active[0].id }, 429);
     // The CLI marks runs started from GitHub Actions so the Integrations page can show the last CI check.
     const trigger = c.req.header('x-loxe-trigger') === 'ci:github' ? 'ci:github' : 'manual';
@@ -411,6 +431,7 @@ export function createApp({ db, baseUrl }) {
     const a = await agentRow(c.req.param('id'), org(c));
     if (!a) return c.json({ error: 'not found' }, 404);
     const { enabled, intervalHours } = await c.req.json().catch(() => ({}));
+    if (enabled && a.source === 'hand') return c.json({ error: 'scheduled re-tests need a URL; this agent is tested by hand' }, 400);
     const hours = Math.min(Math.max(parseInt(intervalHours ?? a.sentinel_interval_hours, 10) || 24, 1), 24 * 30);
     const r = (await db.query(
       `update agents set sentinel_enabled = $1, sentinel_interval_hours = $2,
@@ -440,10 +461,43 @@ export function createApp({ db, baseUrl }) {
     });
   });
 
+  // Hand-collected runs: the script, one reply at a time, then judge.
+  const handRun = async (c) => {
+    const r = (await db.query(`select * from runs where id = $1 and org_id = $2`, [c.req.param('id'), org(c)])).rows[0];
+    return r && r.trigger === 'hand' ? r : null;
+  };
+  api.get('/runs/:id/script', async (c) => {
+    const r = await handRun(c);
+    if (!r) return c.json({ error: 'not found' }, 404);
+    try { return c.json(await orchestrator.handScript(r)); } catch (e) { return c.json({ error: e.message }, 409); }
+  });
+  api.put('/runs/:id/replies/:probeId', async (c) => {
+    const r = await handRun(c);
+    if (!r) return c.json({ error: 'not found' }, 404);
+    if (r.status !== 'awaiting_replies') return c.json({ error: 'this run is already judged' }, 409);
+    const b = await c.req.json().catch(() => ({}));
+    try { return c.json(await orchestrator.saveReply(r, c.req.param('probeId'), { replies: b.replies, skip: !!b.skip })); }
+    catch (e) { return c.json({ error: e.message }, e.status || 500); }
+  });
+  api.post('/runs/:id/finish', async (c) => {
+    const r = await handRun(c);
+    if (!r) return c.json({ error: 'not found' }, 404);
+    if (r.status !== 'awaiting_replies') return c.json({ error: 'this run is already judged' }, 409);
+    const a = await agentRow(r.agent_id, org(c));
+    if (!a) return c.json({ error: 'not found' }, 404);
+    const answered = (await db.query(`select count(*)::int as n from vendor_requests where run_id = $1 and response_body not like '%"skipped"%'`, [r.id])).rows[0].n;
+    if (!answered) return c.json({ error: 'paste at least one reply before Loxe judges the run' }, 400);
+    try {
+      const report = await orchestrator.finishHand(r, a);
+      return c.json({ runId: r.id, grade: report.grade });
+    } catch (e) { return c.json({ error: e.message }, e.status || 500); }
+  });
+
   api.post('/runs/:id/replay/:probeId', async (c) => {
     const r = (await db.query(`select * from runs where id = $1 and org_id = $2`, [c.req.param('id'), org(c)])).rows[0];
     if (!r) return c.json({ error: 'not found' }, 404);
     const a = await agentRow(r.agent_id, org(c));
+    if (a?.source === 'hand') return c.json({ error: 'replay needs a URL; this agent was tested by hand' }, 400);
     try {
       return c.json(await orchestrator.replay(r, a, c.req.param('probeId')));
     } catch (err) {

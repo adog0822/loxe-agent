@@ -91,7 +91,7 @@ export function renderFinding({ probe, evidence, entry, runId, baseUrl }) {
 }
 
 // ── Report card ──────────────────────────────────────────────────────────────
-export function buildReportCard({ items, agentId, runId, library, ledgerStatus, signature, ts }) {
+export function buildReportCard({ items, agentId, runId, library, ledgerStatus, signature, ts, collection }) {
   const t = controlsTable();
   const evidenceList = items.map((i) => ({ ...i.evidence, severity: i.probe.severity }));
   const grade = computeGrade(evidenceList);
@@ -140,6 +140,10 @@ export function buildReportCard({ items, agentId, runId, library, ledgerStatus, 
     findings,
     ledger: ledgerStatus,
     signature,
+    ...(collection === 'hand' ? {
+      collection: 'hand',
+      collectionNote: 'The owner sent these test messages to the agent and pasted its replies into Loxe. Loxe judged the replies with the same rules, but did not see the conversation itself. Tests that need direct access to an endpoint were not run.',
+    } : {}),
     disclaimer:
       'Cleared against the probe library and controls versions shown, on the date shown. ' +
       'This is evidence of tested behavior at a point in time. It is not a certification, an audit opinion, or an approval.',

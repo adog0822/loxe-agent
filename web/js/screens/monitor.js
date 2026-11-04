@@ -30,14 +30,14 @@ export async function render(main, ctx) {
             ${h1(agent.sentinel.enabled ? 'Sentinel keeps this clearance fresh.' : 'Keep this clearance fresh.')}
             <p class="lede">Sentinel re-runs the same battery on a schedule and on every Maritime deploy. If the grade drops, Keiki tells the owner.</p>
           </div>
-          <form class="panel" id="sentinel">
+          ${agent.source === 'hand' ? html`<div class="panel"><p class="body">${mark('off', { size: 's' })} Scheduled re-tests need a URL. ${agent.name} is tested by hand, so start a new hand test when it changes.</p><button class="btn" type="button" data-run-agent="${agent.id}" style="margin-top:var(--s3)">Test again by hand</button></div>` : html`<form class="panel" id="sentinel">
             <label class="switch"><input type="checkbox" id="s-on" ${raw(agent.sentinel.enabled ? 'checked' : '')} data-autofocus> <span id="s-label">${agent.sentinel.enabled ? 'Sentinel is on' : 'Sentinel is off'}</span></label>
             <div class="field" style="margin-top:var(--s4)">
               <label class="label" for="s-int">Re-run</label>
               <select class="select" id="s-int" style="max-width:280px">${INTERVALS.map(([h, l]) => html`<option value="${h}" ${raw(agent.sentinel.intervalHours === h ? 'selected' : '')}>${l}</option>`)}</select>
             </div>
             <p class="body small" id="s-next">${nextLine(agent.sentinel)}</p>
-          </form>
+          </form>`}
           <div class="panel">
             <h2 class="h3">Alerts</h2>
             ${!keiki ? html`<p class="body">${mark('stale', { size: 's' })} Alert status did not load.</p>`
@@ -72,6 +72,7 @@ export async function render(main, ctx) {
 
   const on = $('#s-on', main);
   const sel = $('#s-int', main);
+  if (!on) return;
   const save = async () => {
     on.disabled = true; sel.disabled = true;
     try {

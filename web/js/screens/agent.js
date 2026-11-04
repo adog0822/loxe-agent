@@ -4,6 +4,6 @@ import { loadAgent } from './common.js';
 export async function render(main, ctx) {
   const { agent, run } = await loadAgent(ctx.params[0]);
   if (!ctx.alive()) return;
-  if (run && (run.status === 'queued' || run.status === 'running')) location.replace(`#/runs/${run.id}`);
+  if (run && (run.status === 'queued' || run.status === 'running' || run.status === 'awaiting_replies')) location.replace(`#/runs/${run.id}`);
   else location.replace(`#/agents/${agent.id}/report`);
 }

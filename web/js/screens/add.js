@@ -1,5 +1,5 @@
-// Add an agent: paste a URL (dominant pane) or pick a Maritime-hosted agent (side pane).
-import { api } from '../api.js';
+// Add an agent: paste a URL (dominant pane), test one with no URL by hand, or pick a Maritime-hosted agent.
+import { api, isDemo } from '../api.js';
 import { endpointHelp } from '../endpoint-help.js';
 import { html, $, $$, mark, skeleton, toast, h1, esc, sentence } from '../ui.js';
 
@@ -45,11 +45,27 @@ export async function render(main, ctx) {
             <button class="btn" type="submit" data-mode="add">Add without running</button>
           </div>
         </form>
+        <div class="stack">
+        <form class="panel" id="handform" aria-labelledby="hand-h" novalidate>
+          <h2 class="h3" id="hand-h">No URL? Test it by hand</h2>
+          <p class="body">For an agent you only reach in an app, like one in iMessage. Loxe gives you each test message to send it, and you paste the replies back. About 20 minutes.</p>
+          <div class="field" style="margin-top:var(--s4)">
+            <label class="label" for="h-name">Agent name</label>
+            <input class="input" id="h-name" autocomplete="off" placeholder="Instinct" required>
+          </div>
+          <div class="field">
+            <label class="label" for="h-where">Where you talk to it</label>
+            <input class="input" id="h-where" autocomplete="off" placeholder="iMessage">
+          </div>
+          <div class="state state--error" id="handerr" hidden role="alert"></div>
+          <button class="btn" type="submit" style="margin-top:var(--s2)">Start the test</button>
+        </form>
         <aside class="panel" id="maritime" aria-labelledby="mt-h">
           <h2 class="h3" id="mt-h">Or pick a Maritime agent</h2>
           <p class="body">One click. Loxe reads the URL from Maritime and starts the run.</p>
           <div id="mt-list" style="margin-top:var(--s4)">${skeleton(3, 'skeleton--tall')}<p class="hint" style="margin-top:var(--s3)">Asking Maritime which agents you host.</p></div>
         </aside>
+        </div>
       </div>
     </section>`);
 
@@ -86,6 +102,24 @@ export async function render(main, ctx) {
     if (hn && hv) body.headers = { [hn]: hv };
     const btn = $(`button[data-mode="${mode}"]`, form);
     await create(body, mode === 'run', btn, ctx, $('#formerr', form));
+  });
+
+  const hand = $('#handform', main);
+  if (ctx.query.hand) { hand.scrollIntoView({ block: 'start' }); $('#h-name', hand).focus(); }
+  hand.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('#h-name', hand).value.trim();
+    const err = $('#handerr', hand);
+    err.hidden = true;
+    if (!name) { err.textContent = 'Give the agent a name.'; err.hidden = false; $('#h-name', hand).focus(); return; }
+    if (isDemo()) { toast('The demo uses sample agents. Leave the demo to test your own.', 'gap'); return; }
+    const b = hand.querySelector('button');
+    b.classList.add('is-busy'); b.disabled = true;
+    try {
+      const a = await api.createAgent({ name, source: 'hand', where: $('#h-where', hand).value.trim() || 'an app' });
+      const r = await api.startRun(a.id);
+      ctx.go(`#/runs/${r.runId}`);
+    } catch (er) { err.textContent = er.message; err.hidden = false; b.classList.remove('is-busy'); b.disabled = false; }
   });
 
   // Maritime side pane

@@ -17,6 +17,7 @@ export async function render(main, ctx) {
   let run = await api.run(runId);
   const agent = await api.agent(run.agentId);
   if (!ctx.alive()) return;
+  if (run.trigger === 'hand' && run.status === 'awaiting_replies') return (await import('./hand.js')).render(main, ctx, run, agent);
 
   const total = run.progress.total || 40;
   const per = Math.ceil(total / CATEGORY_ORDER.length);

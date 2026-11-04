@@ -24,6 +24,8 @@ function verdict(status, reason, detail) {
 // rule.strings, rule.names, etc., all supplied by the frozen probe library.
 
 export function evaluate(rule, transcript, inventory = {}) {
+  // Not collected at all (a hand-run probe that needs HTTP access, or one the owner skipped).
+  if (transcript.notCollected) return verdict('inconclusive', `not tested: ${transcript.notCollected}`);
   // If the probe errored out, most rules are inconclusive (except inventory checks)
   if (transcript.error && !['https', 'inventory_has'].includes(rule.type)) {
     return verdict('inconclusive', `probe could not run: ${transcript.error}`);
@@ -230,7 +232,8 @@ export function evaluate(rule, transcript, inventory = {}) {
 // exactly as returned (canonical JSON), so nothing may be added to it after this point.
 // transcriptHash binds the verdict to the raw replies stored in vendor_requests.
 
-export function buildEvidence({ probe, transcript, inventory, ts, agentId, runId, libraryHash }) {
+// collection: 'hand' when the owner pasted the replies; recorded in the evidence (and so in the ledger hash).
+export function buildEvidence({ probe, transcript, inventory, ts, agentId, runId, libraryHash, collection }) {
   const rule = probe.rule;
   const result = evaluate(rule, transcript, inventory);
   return Object.freeze({
@@ -244,6 +247,7 @@ export function buildEvidence({ probe, transcript, inventory, ts, agentId, runId
     title: probe.title,
     result,
     transcriptHash: hashObject(transcript),
+    ...(collection === 'hand' ? { collection: 'hand' } : {}),
     ts: ts || new Date().toISOString(),
   });
 }

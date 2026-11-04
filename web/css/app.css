@@ -699,3 +699,22 @@ body.owl-open .main { margin-right: min(420px, 100vw); }
 .endpoint-help__list dt { color: var(--ink-2, inherit); }
 .endpoint-help__list dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .endpoint-help__list { grid-template-columns: 1fr; gap: 0 0; } .endpoint-help__list dd { margin-bottom: var(--s2); } }
+
+/* Add agent: right column stacks the hand-test form over Maritime. */
+.stack { display: grid; gap: var(--s5); align-content: start; min-width: 0; }
+
+/* Hand test: one probe at a time. */
+.hand { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--s6); align-items: start; margin-top: var(--s5); }
+.hand__step { min-width: 0; }
+.hand__msg { margin-top: var(--s3); }
+.hand__msg .raw { white-space: pre-wrap; word-break: break-word; margin-top: var(--s2); font-size: 0.9375rem; }
+.hand__turn + .hand__turn { margin-top: var(--s5); padding-top: var(--s5); border-top: var(--hair) solid var(--line); }
+.hand__turn .textarea { width: 100%; min-height: 96px; margin-top: var(--s2); resize: vertical; }
+.hand__nav { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s5); }
+.hand__list { list-style: none; margin: var(--s3) 0 0; padding: 0; max-height: 52vh; overflow-y: auto; }
+.hand__list button { display: grid; grid-template-columns: 14px 52px minmax(0, 1fr); gap: var(--s2); align-items: center; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px var(--s2); border-radius: var(--r-sm); cursor: pointer; font-size: var(--t-small); color: var(--ink-2); }
+.hand__list button:hover { background: var(--surface-2, rgba(0,0,0,.04)); color: var(--ink); }
+.hand__list button[aria-current="step"] { background: var(--ink); color: var(--on-ink); }
+.hand__list .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hand__finish { margin-top: var(--s5); }
+@media (max-width: 860px) { .hand { grid-template-columns: minmax(0, 1fr); } .hand__list { max-height: 240px; } }

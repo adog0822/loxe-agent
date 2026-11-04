@@ -28,9 +28,10 @@ export async function render(main, ctx) {
     main.innerHTML = String(html`<section class="page">
       ${agentHeader(agent, 'report', run)}
       <div class="empty">
-        ${running ? html`${h1('The first run is still going.')}<p class="lede">The report card appears here the moment the last probe finishes.</p><div class="row" style="margin-top:var(--s5)"><a class="btn btn--primary" href="#/runs/${run.id}" data-autofocus>Watch the run</a></div>`
+        ${run?.status === 'awaiting_replies' ? html`${h1('The test is not finished.')}<p class="lede">${run.progress.done} of ${run.progress.total} replies pasted. Paste the rest, or judge what you have.</p><div class="row" style="margin-top:var(--s5)"><a class="btn btn--primary" href="#/runs/${run.id}" data-autofocus>Continue the test</a></div>`
+        : running ? html`${h1('The first run is still going.')}<p class="lede">The report card appears here the moment the last probe finishes.</p><div class="row" style="margin-top:var(--s5)"><a class="btn btn--primary" href="#/runs/${run.id}" data-autofocus>Watch the run</a></div>`
         : run?.status === 'failed' ? html`${h1('No report yet.')}<p class="lede">The last run stopped before it finished: ${run.error || 'no reason given'}. Run it again to get a grade.</p><div class="row" style="margin-top:var(--s5)"><button class="btn btn--primary" data-run-agent="${agent.id}" data-autofocus>Run clearance again</button></div>`
-        : html`${h1('No report yet.')}<p class="lede">Run the battery once and the report card appears here: the grade, what ${agent.name} adheres to and what it does not, the fixes in order, and the evidence behind each one.</p><div class="row" style="margin-top:var(--s5)"><button class="btn btn--primary" data-run-agent="${agent.id}" data-autofocus>Run clearance now</button></div>`}
+        : html`${h1('No report yet.')}<p class="lede">Run the battery once and the report card appears here: the grade, what ${agent.name} adheres to and what it does not, the fixes in order, and the evidence behind each one.</p><div class="row" style="margin-top:var(--s5)"><button class="btn btn--primary" data-run-agent="${agent.id}" data-autofocus>${agent.source === 'hand' ? 'Start the test' : 'Run clearance now'}</button></div>`}
       </div>
     </section>`);
     bindRunButtons(main, ctx.go);
@@ -70,6 +71,7 @@ function paintAll(main, ctx, state, liveRun) {
         <div>
           ${h1(open.length ? `${agent.name} has ${word(open.length)} open ${plural(open.length, 'gap')}.` : `${agent.name} cleared every probe it could.`)}
           <p class="lede">Graded ${rep.grade} because ${gradeReason(rep, open)}. ${rep.passed} of ${rep.total} probes passed${rep.inconclusive ? `, ${word(rep.inconclusive)} could not be decided` : ''}.</p>
+          ${rep.collection === 'hand' ? html`<p class="body" style="margin-top:var(--s2)">${mark('stale', { size: 's' })} <b>Tested by hand.</b> You pasted these replies, so the report says so wherever it is shared. Tests that need an endpoint were not run.</p>` : ''}
           <p class="cover__claim">Cleared against these ${rep.total} probes in battery ${rep.libraryVersion} on ${day(rep.ts)}. This is a record of what the agent did on that date, verifiable by anyone at <a class="link" href="#/agents/${agent.id}/ledger">the ledger</a>. It is not a certification.${stale ? html` <span class="t-stale">It is more than a week old and sentinel is off.</span>` : ''}</p>
           <div class="row cover__actions">
             <a class="btn btn--primary" href="#/agents/${agent.id}/share" ${raw(open.length ? '' : 'data-autofocus')}>Share this clearance</a>

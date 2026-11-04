@@ -160,6 +160,34 @@ ok(ui.status === 200 && (await ui.text()).includes('<html'), 'product UI served 
 const js = await app.request('/app/js/app.js');
 ok(js.status === 200 && (js.headers.get('content-type') || '').includes('javascript'), 'UI modules served as JavaScript');
 
+// Hand-collected run: no URL, owner pastes replies, same Verifier judges them.
+const hand = (await call('POST', '/api/agents', { name: 'Instinct', source: 'hand', where: 'iMessage' })).body;
+ok(hand.source === 'hand' && hand.url === null && hand.where === 'iMessage', 'agent without a URL registered');
+const hr = await call('POST', `/api/agents/${hand.id}/runs`);
+ok(hr.status === 202 && hr.body.status === 'awaiting_replies', 'hand run waits for replies');
+ok((await call('POST', `/api/agents/${hand.id}/runs`)).body.runId === hr.body.runId, 'starting again resumes the open hand run');
+const script = (await call('GET', `/api/runs/${hr.body.runId}/script`)).body;
+ok(script.steps.length >= 30 && script.skipped.length >= 3 && script.steps.every((x) => x.messages.length), 'script lists chat probes and the ones not testable by hand');
+ok((await call('POST', `/api/runs/${hr.body.runId}/finish`)).status === 400, 'cannot judge with no replies');
+const leak = script.steps.find((x) => x.probeId === 'DE-04');
+ok((await call('PUT', `/api/runs/${hr.body.runId}/replies/DE-04`, { replies: ['ok'] })).status === 400, 'multi-turn probe needs every reply');
+await call('PUT', `/api/runs/${hr.body.runId}/replies/DE-04`, { replies: ['Saved.', 'Your recovery code is LX-CANARY-7731.'] });
+for (const st of script.steps.filter((x) => x.probeId !== 'DE-04').slice(0, 10))
+  await call('PUT', `/api/runs/${hr.body.runId}/replies/${st.probeId}`, { replies: st.messages.map(() => "I can't help with that.") });
+await call('PUT', `/api/runs/${hr.body.runId}/replies/${script.steps.at(-1).probeId}`, { skip: true });
+ok((await call('GET', `/api/runs/${hr.body.runId}/script`)).body.steps.find((x) => x.probeId === 'DE-04').saved.replies.length === 2, 'saved replies come back for resuming');
+const fin = await call('POST', `/api/runs/${hr.body.runId}/finish`);
+ok(fin.status === 200 && fin.body.grade, `hand run judged (grade ${fin.body.grade})`);
+const hrep = (await call('GET', `/api/runs/${hr.body.runId}`)).body.report;
+ok(hrep.collection === 'hand' && hrep.collectionNote, 'report says replies were pasted by hand');
+ok(hrep.findings.find((x) => x.probeId === 'DE-04').status === 'fail', 'pasted leak is caught by the same rule');
+ok(hrep.findings.find((x) => x.probeId === 'OH-01').status === 'inconclusive', 'endpoint-only probes are not tested by hand');
+ok((await call('GET', `/verify/${hand.id}`)).body.valid, 'hand run ledger verifies');
+const hEntry = (await call('GET', `/api/agents/${hand.id}/ledger`)).body.entries[0];
+ok(JSON.parse(hEntry.payload).collection === 'hand', 'ledger evidence records hand collection');
+ok((await call('PUT', `/api/runs/${hr.body.runId}/replies/DE-04`, { replies: ['x', 'y'] })).status === 409, 'judged hand run is closed');
+ok((await call('POST', `/api/agents/${hand.id}/sentinel`, { enabled: true })).status === 400, 'scheduled re-tests refused for hand agents');
+
 // Integrations: users see state only; Slack webhook is validated, sealed, and gets alerts.
 const intsView = JSON.stringify((await call('GET', '/api/integrations')).body);
 ok(!intsView.includes('detail') && !intsView.includes('_KEY'), 'integration status hides server config');

@@ -6,7 +6,7 @@
 export function createSentinel({ db, orchestrator }) {
   async function tick({ orgId } = {}) {
     const due = (await db.query(
-      `select * from agents where sentinel_enabled and archived_at is null
+      `select * from agents where sentinel_enabled and archived_at is null and source is distinct from 'hand'
          and (sentinel_next_run_at is null or sentinel_next_run_at <= now()) ${orgId ? 'and org_id = $1' : ''}`,
       orgId ? [orgId] : []
     )).rows;

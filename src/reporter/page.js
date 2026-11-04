@@ -49,6 +49,7 @@ export function clearancePage({ agent, report, chain, baseUrl, notFound }) {
     <input id="h" name="hash" placeholder="64-character sha256" pattern="[0-9a-fA-F]{64}" required>
     <button>Check hash</button>
   </form>
+  ${report?.collectionNote ? `<p class="disc"><b>Tested by hand.</b> ${esc(report.collectionNote)}</p>` : ''}
   <p class="disc">${esc(report?.disclaimer || 'Clearance is evidence of tested behavior at a point in time, not a certification.')}</p>
 </main>`;
   return shell(`${agent.name} clearance`, body);

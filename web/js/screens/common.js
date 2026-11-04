@@ -31,6 +31,12 @@ export function attention(agent, run) {
     const worst = fails[0];
     return { ...base, score: 70 + SEV_RANK[worst.severity] * 2 + fails.length / 100, state: 'fail', headline: `Fix ${name} first.`, why: worst.plainEnglish, rule: `Graded ${report.grade}. ${Word(fails.length)} open ${plural(fails.length, 'gap')}: ${joinList(severityCounts(fails))}.`, short: `${Word(fails.length)} open ${plural(fails.length, 'gap')}, worst is ${worst.severity}`, action: { label: `Fix the ${worst.severity} gap`, href: `#/agents/${agent.id}/report?finding=${encodeURIComponent(worst.probeId)}` }, finding: worst };
   }
+  if (run?.status === 'awaiting_replies') {
+    return { ...base, score: 40, state: 'pending', headline: `Finish testing ${name}.`, why: `${Word(run.progress.done)} of ${run.progress.total} replies pasted. They are saved, so pick up where you left off.`, short: `${run.progress.done} of ${run.progress.total} replies pasted`, action: { label: 'Continue the test', href: `#/runs/${run.id}` } };
+  }
+  if (!agent.lastRunId && agent.source === 'hand') {
+    return { ...base, score: 60, state: 'pending', headline: `Test ${name} by hand.`, why: `Loxe gives you each test message to send it in ${agent.where}, and you paste the replies back.`, short: 'Not tested yet', action: { label: 'Start the test', run: agent.id } };
+  }
   if (!agent.lastRunId) {
     return { ...base, score: 60, state: 'pending', headline: `Clear ${name} for the first time.`, why: `It was added ${ago(agent.createdAt)} and has never been probed. The battery takes about a minute.`, short: 'Never probed', action: { label: 'Run clearance now', run: agent.id } };
   }
@@ -60,7 +66,8 @@ export async function startRun(agentId, go, btn) {
 }
 
 export function agentHeader(agent, active, run, { seal: showSeal = true } = {}) {
-  const running = run && (run.status === 'queued' || run.status === 'running');
+  const running = run && (run.status === 'queued' || run.status === 'running' || run.status === 'awaiting_replies');
+  const liveLabel = run?.status === 'awaiting_replies' ? 'Continue the test' : 'Watch the run';
   const tabs = [
     ['report', 'Report'],
     ['ledger', 'Ledger'],
@@ -75,16 +82,16 @@ export function agentHeader(agent, active, run, { seal: showSeal = true } = {}) 
           ${showSeal ? seal(agent.grade, { size: 'm', stale: isStale(agent), running }) : ''}
           <div style="min-width:0">
             <h2 class="h2">${agent.name}</h2>
-            <div class="agenthead__url">${agent.url}</div>
+            <div class="agenthead__url">${agent.source === 'hand' ? `Tested by hand, ${agent.where}` : agent.url}</div>
           </div>
         </div>
         <div class="row">
-          ${running && active === 'run' ? '' : running ? html`<a class="btn" href="#/runs/${run.id}"><span class="mark mark--running mark--s" aria-hidden="true"></span>Watch the run</a>` : html`<button class="btn" data-run-agent="${agent.id}">${agent.lastRunId ? 'Re-run clearance' : 'Run clearance'}</button>`}
+          ${running && active === 'run' ? '' : running ? html`<a class="btn" href="#/runs/${run.id}"><span class="mark mark--running mark--s" aria-hidden="true"></span>${liveLabel}</a>` : html`<button class="btn" data-run-agent="${agent.id}">${agent.source === 'hand' ? (agent.lastRunId ? 'Test again by hand' : 'Start the test') : agent.lastRunId ? 'Re-run clearance' : 'Run clearance'}</button>`}
         </div>
       </div>
       <nav class="tabs" aria-label="${agent.name}">
         ${tabs.map(([k, l]) => html`<a href="#/agents/${agent.id}/${k}" ${raw(active === k ? 'aria-current="page"' : '')}>${l}</a>`)}
-        ${running ? html`<a href="#/runs/${run.id}" ${raw(active === 'run' ? 'aria-current="page"' : '')}><span class="mark mark--running mark--s" aria-hidden="true"></span>Live run</a>` : ''}
+        ${running ? html`<a href="#/runs/${run.id}" ${raw(active === 'run' ? 'aria-current="page"' : '')}><span class="mark mark--running mark--s" aria-hidden="true"></span>${run.status === 'awaiting_replies' ? 'Test in progress' : 'Live run'}</a>` : ''}
       </nav>
     </div>`;
 }

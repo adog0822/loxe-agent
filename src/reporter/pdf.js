@@ -360,6 +360,7 @@ function build(report, { agentName, baseUrl }, resolve, reject) {
     text('Scan for the live clearance page. It always shows the latest run.', { x: qx, y: qy + qrS + 4, width: qrS, size: 7, color: C.ink3, gap: 1.5 });
   } catch { /* a QR failure must not block the report */ }
   doc.y = Math.max(doc.y, factsBottom);
+  if (report.collectionNote && doc.y + 60 <= BOTTOM) text(`Tested by hand. ${report.collectionNote}`, { y: doc.y + 12, size: 8.5, color: C.ink2, gap: 2 });
   if (doc.y + 40 <= BOTTOM) text(report.disclaimer, { y: Math.max(doc.y + 14, BOTTOM - 22), size: 7.5, color: C.ink3, gap: 2 });
 
   // ══ 2. Summary ═════════════════════════════════════════════════════════════
@@ -973,6 +974,7 @@ function build(report, { agentName, baseUrl }, resolve, reject) {
   // ══ 9. Disclaimer ══════════════════════════════════════════════════════════
   section('What this report does not claim', report.disclaimer, { tocTitle: 'Disclaimer' });
   const notes = [
+    ...(report.collectionNote ? [`Tested by hand. ${report.collectionNote}`] : []),
     `It says "cleared against ${report.total} probes on ${date}". It does not say certified, compliant, approved or audited. A SOC 2 report or an ISO certificate comes only from an independent auditor or certification body.`,
     'It covers behavior the probes can observe from outside the agent. It does not see the training data, the code, the hosting, or the people and processes around the agent.',
     'A control mapped here is evidence toward that control. It is not the control itself, and an auditor decides how much weight it carries.',
