@@ -400,7 +400,9 @@ details.more[open] > summary::after { transform: rotate(225deg); margin-top: 3px
 .int__fix { margin-top: var(--s1); font-size: var(--t-small); color: var(--ink-3); }
 #i-slack, #i-github { max-width: 760px; }
 .isteps { margin: var(--s4) 0; padding-left: 1.25em; list-style: decimal; display: grid; gap: var(--s4); }
-.isteps > li { display: list-item; padding: 0; border: 0; }
+.isteps { grid-template-columns: minmax(0, 1fr); }
+.isteps > li { display: list-item; padding: 0; border: 0; min-width: 0; }
+#i-slack, #i-github, .isteps .snip { min-width: 0; }
 .isteps > li::marker { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .isteps .snip, .isteps .intform__opts, .isteps .intform__btns { margin-top: var(--s2); }
 .isteps .snip .raw { margin-top: var(--s2); }
