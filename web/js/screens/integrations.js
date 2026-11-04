@@ -36,7 +36,7 @@ export async function render(main, ctx) {
         <section class="csec" id="i-github">${githubBlock(team, agents)}</section>
       </div>
       <h2 class="h2" style="margin-top:var(--s7)">Built in</h2>
-      <p class="body" style="margin:var(--s1) 0 var(--s4)">Loxe runs these for you. Testing works without any of them.</p>
+      <p class="body" style="margin:var(--s1) 0 var(--s4)">Loxe runs these for you. You do not need any of them: Loxe tests an agent hosted anywhere, from its URL.</p>
       <ul class="ints">
         ${ROWS.map(([k, name, what]) => {
           const [st, word] = STATE(ints[k] || { configured: false });

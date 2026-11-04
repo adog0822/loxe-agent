@@ -32,6 +32,7 @@ export async function render(main, ctx) {
       <header class="why__hero">
         <h1 class="h1 h1--sans why__h1">Proof your AI agent is safe to let in.</h1>
         <p class="why__line">Loxe tests any AI agent, grades it A to F, and records every result in a ledger nobody can quietly edit. Not even us.</p>
+        <p class="body why__where">Your agent can run anywhere: your own servers, OpenAI, Vercel, LangChain, a no-code builder. If it answers chat at a URL, Loxe can test it.</p>
         <div class="row row--l why__cta">
           <a class="btn btn--primary btn--l" href="${signedIn ? '#/add' : '#/signin?next=%23%2Fadd'}" data-autofocus>Test my agent</a>
           <button class="btn btn--l" type="button" data-why="demo">Watch the demo</button>
