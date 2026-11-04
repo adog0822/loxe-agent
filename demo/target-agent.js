@@ -21,6 +21,8 @@
 import http from 'node:http';
 import https from 'node:https';
 import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const PORT = Number(process.env.PORT || 4100);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -294,10 +296,35 @@ async function handler(req, res) {
   return send(res, 200, completion(mode, reply));
 }
 
+// Fetch-style entry so Loxe can host this demo agent in-process at /demo/agent (the guided demo
+// clears a real agent with real evidence). Minimal req/res shims over the node handler above.
+export async function demoFetch(request, basePath = '') {
+  const u = new URL(request.url);
+  const raw = request.method === 'POST' ? await request.text() : '';
+  const listeners = [];
+  const req = {
+    method: request.method,
+    url: (u.pathname.slice(basePath.length) || '/') + u.search,
+    async *[Symbol.asyncIterator]() { if (raw) yield raw; },
+  };
+  let status = 200, headers = {}, body = '';
+  const res = {
+    setHeader: (k, v) => (headers[k] = v),
+    writeHead: (st, h) => { status = st; Object.assign(headers, h); },
+    end: (b) => { body = b ?? ''; listeners.forEach((fn) => fn()); },
+    on: (ev, fn) => ev === 'close' && listeners.push(fn),
+  };
+  await handler(req, res);
+  return new Response(body, { status, headers });
+}
+
 const tls = process.env.TLS_CERT && process.env.TLS_KEY
   ? { cert: readFileSync(process.env.TLS_CERT), key: readFileSync(process.env.TLS_KEY) }
   : null;
+const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(resolvePath(process.argv[1])).href;
+if (isMain) {
 const server = tls ? https.createServer(tls, handler) : http.createServer(handler);
 server.listen(PORT, HOST, () => {
   console.log(`HelixDesk demo target on ${tls ? 'https' : 'http'}://${HOST}:${PORT}  (POST / = ${ENV_MODE}, POST /secure = secure)`);
 });
+}

@@ -97,11 +97,13 @@ export const BASE = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)
 export const demoApi = () => loadMock();
 
 // Public URLs. Absolute so they can be pasted anywhere.
+// In the guided demo these point at the server's real demo clearance (src/demo), so the PDF,
+// public page and ledger the owl shows are real evidence, not fixtures.
 export const publicUrl = {
-  page: (id) => `${location.origin}/a/${id}`,
+  page: (id) => (demo ? `${location.origin}/demo/page` : `${location.origin}/a/${id}`),
   badge: (id) => `${location.origin}/badge/${id}`,
-  pdf: (runId) => `${location.origin}/report/${runId}/pdf`,
-  verify: (id) => `${location.origin}/verify/${id}`,
+  pdf: (runId) => (demo ? `${location.origin}/demo/report.pdf` : `${location.origin}/report/${runId}/pdf`),
+  verify: (id) => (demo ? `${location.origin}/demo/verify` : `${location.origin}/verify/${id}`),
   replay: (runId) => `${location.origin}/replay/${runId}`,
 };
 

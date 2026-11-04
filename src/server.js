@@ -17,11 +17,13 @@ const baseUrl = (
 ).replace(/\/$/, '');
 
 const db = await createDb();
-const { app, sentinel } = createApp({ db, baseUrl });
+const { app, sentinel, demo } = createApp({ db, baseUrl });
 sentinel.start();
 
 serve({ fetch: app.fetch, port, hostname: '0.0.0.0' }, () => {
   console.log(`Loxe on ${baseUrl} (db: ${db.engine})`);
+  // Warm the guided demo's real clearance so its PDF is ready on first click.
+  setTimeout(() => demo.ids().catch((e) => console.warn(`[demo] ${e.message}`)), 3000);
 });
 
 process.on('SIGTERM', async () => {

@@ -18,6 +18,8 @@ import { generateBadge } from '../reporter/badge.js';
 import { clearancePage } from '../reporter/page.js';
 import { createSentinel } from '../sentinel/index.js';
 import { integration, integrationStatus } from '../integrations/index.js';
+import { createDemo } from '../demo/index.js';
+import { demoFetch } from '../../demo/target-agent.js';
 import { buildOwlMessages, askViaRest, OWL_MODEL } from '../guide/index.js';
 
 export function createApp({ db, baseUrl }) {
@@ -26,6 +28,7 @@ export function createApp({ db, baseUrl }) {
   const ledger = new Ledger(db);
   const orchestrator = new Orchestrator({ db, baseUrl });
   const sentinel = createSentinel({ db, orchestrator });
+  const demo = createDemo({ db, orchestrator, baseUrl });
 
   const agentRow = async (agentId, orgId) =>
     (await db.query(
@@ -136,6 +139,14 @@ export function createApp({ db, baseUrl }) {
     if (!viaSecret && !who) return c.json({ error: 'unauthorized' }, 401);
     return c.json(await sentinel.tick({ orgId: who?.org.id }));
   });
+
+  // ── Guided demo: a real agent, really cleared (see src/demo) ────────────
+  app.all('/demo/agent/*', (c) => demoFetch(c.req.raw, '/demo/agent'));
+  app.all('/demo/agent', (c) => demoFetch(c.req.raw, '/demo/agent'));
+  app.get('/demo/ids', async (c) => c.json(await demo.ids()));
+  app.get('/demo/report.pdf', async (c) => c.redirect(`/report/${(await demo.ids()).runId}/pdf`));
+  app.get('/demo/page', async (c) => c.redirect(`/a/${(await demo.ids()).agentId}`));
+  app.get('/demo/verify', async (c) => c.redirect(`/verify/${(await demo.ids()).agentId}`));
 
   // ── Public proof surfaces ──────────────────────────────────────────────────
   app.get('/.well-known/loxe-signing-key', async (c) => {
@@ -416,5 +427,5 @@ export function createApp({ db, baseUrl }) {
   });
   app.use('/app/*', serveStatic({ root: './web', rewriteRequestPath: (p) => p.replace(/^\/app/, '') }));
 
-  return { app, orchestrator, sentinel };
+  return { app, orchestrator, sentinel, demo };
 }
