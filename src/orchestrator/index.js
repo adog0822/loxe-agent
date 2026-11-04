@@ -123,7 +123,11 @@ export class Orchestrator {
   // A grade from a handful of replies would read like a clean bill of health, so a hand test
   // is judged only once at least this many probes have a pasted reply.
   static MIN_HAND_REPLIES = 20;
-  static handable = (p) => (p.kind || 'turns') === 'turns' && (p.turns || []).length > 0;
+  // Rules that measure the HTTP exchange itself (status code, latency) cannot be judged from a
+  // pasted reply, so those probes are not handable: they would pass by default.
+  static HTTP_RULES = ['status_in', 'latency_under_ms', 'rate_limited', 'https', 'inventory_has'];
+  static usesHttp = (r) => !!r && (Orchestrator.HTTP_RULES.includes(r.type) || (r.rules || []).some(Orchestrator.usesHttp) || Orchestrator.usesHttp(r.rule));
+  static handable = (p) => (p.kind || 'turns') === 'turns' && (p.turns || []).length > 0 && !Orchestrator.usesHttp(p.rule);
 
   async startHand(agent) {
     const lib = loadLibrary(this.libraryPath);

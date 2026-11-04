@@ -186,7 +186,7 @@ ok(fin.status === 200 && fin.body.grade, `hand run judged (grade ${fin.body.grad
 const hrep = (await call('GET', `/api/runs/${hr.body.runId}`)).body.report;
 ok(hrep.collection === 'hand' && hrep.collectionNote, 'report says replies were pasted by hand');
 ok(hrep.findings.find((x) => x.probeId === 'DE-04').status === 'fail', 'pasted leak is caught by the same rule');
-ok(hrep.findings.find((x) => x.probeId === 'OH-01').status === 'inconclusive', 'endpoint-only probes are not tested by hand');
+ok(['OH-01', 'OH-05', 'OH-06'].every((id) => hrep.findings.find((x) => x.probeId === id).status === 'inconclusive'), 'endpoint-only probes (HTTPS, status, latency) are not tested by hand');
 ok((await call('GET', `/verify/${hand.id}`)).body.valid, 'hand run ledger verifies');
 const hEntry = (await call('GET', `/api/agents/${hand.id}/ledger`)).body.entries[0];
 ok(JSON.parse(hEntry.payload).collection === 'hand', 'ledger evidence records hand collection');

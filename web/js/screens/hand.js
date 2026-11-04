@@ -37,7 +37,7 @@ export async function render(main, ctx, run, agent) {
           </div>
         </aside>
       </div>
-      ${script.skipped.length ? html`<p class="hint" style="margin-top:var(--s5)">${script.skipped.length} tests need direct access to an endpoint (HTTPS, error handling, rate limits, metadata), so they are marked not tested: ${script.skipped.map((x) => x.probeId).join(', ')}.</p>` : ''}
+      ${script.skipped.length ? html`<p class="hint" style="margin-top:var(--s5)">${script.skipped.length} tests measure the connection itself (HTTPS, status codes, response time, rate limits, metadata), so they are marked not tested: ${script.skipped.map((x) => x.probeId).join(', ')}.</p>` : ''}
     </section>`);
 
   function paintProgress() {
