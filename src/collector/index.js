@@ -3,7 +3,32 @@
 // burst (rapid-fire for rate-limit checks), and inventory (metadata fetch).
 // Every response is captured as-is; the Collector never interprets pass/fail.
 
+import { fetch as undiciFetch } from 'undici';
+import { guardedDispatcher } from './guard.js';
+
 const DEFAULT_TIMEOUT = 30000;
+const MAX_BODY = 64 * 1024; // replies are judged on at most 64 KB; the rest is dropped unread
+
+// Every request: guarded DNS (no private addresses even after rebinding), never follow redirects.
+const guardedFetch = (url, opts) => undiciFetch(url, { ...opts, redirect: 'manual', dispatcher: guardedDispatcher() });
+
+async function readCapped(res, max = MAX_BODY) {
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    size += value.length;
+    if (size >= max) {
+      await reader.cancel().catch(() => {});
+      break;
+    }
+  }
+  return Buffer.concat(chunks).subarray(0, max).toString('utf8');
+}
 
 export class Collector {
   constructor({ targetUrl, headers = {}, timeout = DEFAULT_TIMEOUT }) {
@@ -20,14 +45,14 @@ export class Collector {
       messages.push({ role: 'user', content: turn.message });
       const start = Date.now();
       try {
-        const res = await fetch(this.targetUrl, {
+        const res = await guardedFetch(this.targetUrl, {
           method: 'POST',
           headers: this.headers,
           body: JSON.stringify({ messages }),
           signal: AbortSignal.timeout(this.timeout),
         });
         const latencyMs = Date.now() - start;
-        const body = await res.text();
+        const body = await readCapped(res);
         let parsed;
         try {
           parsed = JSON.parse(body);
@@ -67,14 +92,14 @@ export class Collector {
     const raw = probe.raw || {};
     const start = Date.now();
     try {
-      const res = await fetch(this.targetUrl, {
+      const res = await guardedFetch(this.targetUrl, {
         method: 'POST',
         headers: { ...this.headers, ...(raw.contentType ? { 'Content-Type': raw.contentType } : {}) },
         body: raw.body ?? '',
         signal: AbortSignal.timeout(this.timeout),
       });
       const latencyMs = Date.now() - start;
-      const body = await res.text();
+      const body = await readCapped(res);
       return {
         turns: [{ text: body, status: res.status, httpStatus: res.status, latencyMs }],
         url: this.targetUrl,
@@ -98,14 +123,14 @@ export class Collector {
         (async () => {
           const start = Date.now();
           try {
-            const res = await fetch(this.targetUrl, {
+            const res = await guardedFetch(this.targetUrl, {
               method: 'POST',
               headers: this.headers,
               body: JSON.stringify({ messages: [{ role: 'user', content: burst.message }] }),
               signal: AbortSignal.timeout(this.timeout),
             });
             const latencyMs = Date.now() - start;
-            const body = await res.text();
+            const body = await readCapped(res);
             return { text: body, status: res.status, httpStatus: res.status, latencyMs };
           } catch (err) {
             return { text: '', status: 0, httpStatus: 0, latencyMs: Date.now() - start, error: err.message };
@@ -122,12 +147,12 @@ export class Collector {
     const inventory = { url: this.targetUrl };
     // Try well-known agent manifest
     try {
-      const res = await fetch(`${this.targetUrl}/.well-known/agent.json`, {
+      const res = await guardedFetch(`${this.targetUrl}/.well-known/agent.json`, {
         headers: this.headers,
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = JSON.parse(await readCapped(res, 16 * 1024));
         Object.assign(inventory, data);
         inventory.url = this.targetUrl; // the manifest must not override the endpoint we actually probed
       }

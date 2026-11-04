@@ -209,7 +209,8 @@ async function route() {
   const params = path.match(hit[0]).slice(1);
   let mod;
   try { mod = await hit[1](); } catch (err) {
-    main.innerHTML = String(html`<section class="page"><div class="state state--error" role="alert"><div class="state__head"><span class="mark mark--fail" aria-hidden="true"></span><h2 class="h2">This screen did not load.</h2></div><p class="body">The browser could not load its code: ${err.message}. Reload the page to fetch it again.</p><div class="row"><button class="btn" onclick="location.reload()">Reload</button></div></div></section>`);
+    setTimeout(() => main.querySelector('[data-reload]')?.addEventListener('click', () => location.reload()));
+    main.innerHTML = String(html`<section class="page"><div class="state state--error" role="alert"><div class="state__head"><span class="mark mark--fail" aria-hidden="true"></span><h2 class="h2">This screen did not load.</h2></div><p class="body">The browser could not load its code: ${err.message}. Reload the page to fetch it again.</p><div class="row"><button class="btn" data-reload>Reload</button></div></div></section>`);
     return;
   }
   if (seq !== renderSeq) return;

@@ -4,7 +4,10 @@
 //   /health, /chat, /schedules, /hooks/maritime, /sentinel/tick   machine contracts
 //   /app/*      the product UI (static files in web/)
 import { readFileSync } from 'node:fs';
+import { timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
+import { secureHeaders } from 'hono/secure-headers';
+import { bodyLimit } from 'hono/body-limit';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { id, sha256 } from '../core/canonical.js';
 import { createAuth, authProvider } from '../auth/index.js';
@@ -29,6 +32,7 @@ export function createApp({ db, baseUrl }) {
   const ledger = new Ledger(db);
   const orchestrator = new Orchestrator({ db, baseUrl });
   const sentinel = createSentinel({ db, orchestrator });
+  const pdfCache = new Map(); // finished reports are immutable apart from decisions
   const demo = createDemo({ db, orchestrator, baseUrl });
 
   const agentRow = async (agentId, orgId) =>
@@ -91,6 +95,41 @@ export function createApp({ db, baseUrl }) {
     return run;
   }
 
+  // ── Security headers + request size limits ─────────────────────────────────
+  // CSP: own scripts, Clerk (sign-in UI + its Cloudflare challenge), the pinned jsdelivr bundles and
+  // Google Fonts. The one inline script (theme before paint) is allowed by hash.
+  const clerkHost = (() => {
+    try {
+      const pk = process.env.CLERK_PUBLISHABLE_KEY || '';
+      return `https://${Buffer.from(pk.replace(/^pk_(test|live)_/, ''), 'base64').toString().replace(/\$$/, '')}`;
+    } catch { return ''; }
+  })();
+  app.use('*', secureHeaders({
+    contentSecurityPolicy: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'sha256-erhXR0Mm3t8/aV6S2Q1zaOPNpUY/Xm0G6/qo1ypkzSU='", 'https://cdn.jsdelivr.net', 'https://challenges.cloudflare.com', clerkHost].filter(Boolean),
+      connectSrc: ["'self'", clerkHost, 'https://*.clerk.accounts.dev', 'https://clerk-telemetry.com'].filter(Boolean),
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://img.clerk.com'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      frameSrc: ['https://challenges.cloudflare.com', clerkHost].filter(Boolean),
+      workerSrc: ["'self'", 'blob:'],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+    },
+    strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+    referrerPolicy: 'strict-origin-when-cross-origin',
+    xFrameOptions: 'DENY',
+    crossOriginEmbedderPolicy: false,
+  }));
+  const limit = bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: 'request body too large (64 KB max)' }, 413) });
+  app.use('/api/*', limit);
+  app.use('/demo/*', limit);
+  app.use('/chat', limit);
+  app.use('/hooks/*', limit);
+
   // ── Machine contracts ──────────────────────────────────────────────────────
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
@@ -100,24 +139,20 @@ export function createApp({ db, baseUrl }) {
   app.get('/', (c) => c.redirect('/app/'));
 
   // Maritime chat contract: a read-only command surface (runs need an authenticated call).
+  // Chat surface (Maritime agent contract). Read-only, public agents only.
   app.post('/chat', async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    const msg = String(body.message || body.messages?.at?.(-1)?.content || '').trim();
-    // Maritime's schedule wakes the VM by sending its prompt here; route it to the sentinel.
-    if (await integration('maritime', 'isSentinelTick', msg)) {
-      const r = await sentinel.tick();
-      return c.json({ response: `Sentinel tick: ${r.due} agent(s) due, ${r.runs.length} run(s) queued.` });
-    }
+    const msg = String(body.message || body.messages?.at?.(-1)?.content || '').slice(0, 2000);
     const m = msg.match(/(agent-[0-9a-f]{12})/i);
     if (m) {
       const a = await agentRow(m[1].toLowerCase());
-      if (!a) return c.json({ response: `No agent ${m[1]}.` });
+      if (!a || !a.is_public) return c.json({ response: `No public clearance for ${m[1]}.` });
       const chain = await ledger.verify(a.id);
       return c.json({
         response: `${a.name}: grade ${a.current_grade || 'not cleared yet'}. Ledger ${chain.valid ? 'verifies' : 'does NOT verify'} (${chain.length} entries). ${baseUrl}/a/${a.id}`,
       });
     }
-    return c.json({ response: 'Send an agent id (agent-…) to get its clearance grade and ledger status.' });
+    return c.json({ response: 'Send an agent id (agent-...) to get its public clearance grade and ledger status.' });
   });
 
   app.get('/schedules', async (c) => c.json((await integration('maritime', 'schedules')) || []));
@@ -139,7 +174,9 @@ export function createApp({ db, baseUrl }) {
   app.post('/sentinel/tick', async (c) => {
     const secret = process.env.LOXE_SCHEDULE_SECRET;
     const header = c.req.header('authorization') || '';
-    const viaSecret = secret && header === `Bearer ${secret}`;
+    const expected = Buffer.from(`Bearer ${secret || ''}`);
+    const given = Buffer.from(header);
+    const viaSecret = !!secret && given.length === expected.length && timingSafeEqual(given, expected);
     const who = viaSecret ? null : await auth.identify(c);
     if (!viaSecret && !who) return c.json({ error: 'unauthorized' }, 401);
     return c.json(await sentinel.tick({ orgId: who?.org.id }));
@@ -194,7 +231,14 @@ export function createApp({ db, baseUrl }) {
     if (!run?.report) return c.text('Run not found or not finished', 404);
     const agent = await agentRow(run.agent_id);
     const view = await withDecisions(runView(run), { publicView: true });
-    const pdf = await generatePDF(view.report, { agentName: agent?.name || run.agent_id, baseUrl });
+    const decided = view.report.findings.filter((f) => f.decision).length;
+    const cacheKey = `${run.id}:${decided}:${agent?.name}`;
+    let pdf = pdfCache.get(cacheKey);
+    if (!pdf) {
+      pdf = await generatePDF(view.report, { agentName: agent?.name || run.agent_id, baseUrl });
+      pdfCache.set(cacheKey, pdf);
+      if (pdfCache.size > 50) pdfCache.delete(pdfCache.keys().next().value);
+    }
     return c.body(pdf, 200, {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="loxe-${run.id}.pdf"`,
@@ -206,8 +250,19 @@ export function createApp({ db, baseUrl }) {
     if (!/^[0-9a-f]{64}$/.test(hash)) return c.json({ error: 'pass ?hash= with a 64-character SHA-256 hex hash' }, 400);
     return c.json(await ledger.findByHash(hash));
   });
-  app.get('/verify/:agentId', async (c) => c.json({ agentId: c.req.param('agentId'), ...(await ledger.verify(c.req.param('agentId'))) }));
-  app.get('/ledger/:agentId/export', async (c) => c.json(await ledger.export(c.req.param('agentId'))));
+  // Chain status (hashes only) stays checkable even after an agent is made private or deleted, so
+  // reports already shared still verify. Unknown agents are 404, never "valid".
+  app.get('/verify/:agentId', async (c) => {
+    const known = (await db.query(`select 1 from agents where id = $1`, [c.req.param('agentId')])).rows[0];
+    if (!known) return c.json({ error: 'no such agent' }, 404);
+    return c.json({ agentId: c.req.param('agentId'), ...(await ledger.verify(c.req.param('agentId'))) });
+  });
+  // Full export (verdict payloads) only for public agents; owners use /api/agents/:id/ledger.
+  app.get('/ledger/:agentId/export', async (c) => {
+    const a = await agentRow(c.req.param('agentId'));
+    if (!a?.is_public) return c.json({ error: 'not found' }, 404);
+    return c.json(await ledger.export(a.id));
+  });
 
   // ── Product API (authenticated) ────────────────────────────────────────────
   const api = new Hono();
@@ -260,6 +315,7 @@ export function createApp({ db, baseUrl }) {
   api.post('/agents', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     let { name, url, headers, source = 'url', maritimeAgentId } = body;
+    if (maritimeAgentId && !maritimeAllowed(org(c))) return c.json({ error: 'Maritime intake is not enabled for this organization; paste the agent URL instead' }, 403);
     if (source === 'maritime' && maritimeAgentId && !url) {
       const m = await integration('maritime', 'getAgent', maritimeAgentId);
       if (!m?.url) return c.json({ error: 'that Maritime agent has no public URL yet' }, 400);
@@ -267,6 +323,8 @@ export function createApp({ db, baseUrl }) {
       name ||= m.name;
     }
     if (!name || !url) return c.json({ error: 'name and url are required' }, 400);
+    const count = (await db.query(`select count(*)::int as n from agents where org_id = $1 and archived_at is null`, [org(c)])).rows[0].n;
+    if (count >= 50) return c.json({ error: 'limit of 50 agents per organization reached' }, 429);
     try {
       await assertProbeable(url);
     } catch (err) {
@@ -309,6 +367,10 @@ export function createApp({ db, baseUrl }) {
   api.post('/agents/:id/runs', async (c) => {
     const a = await agentRow(c.req.param('id'), org(c));
     if (!a) return c.json({ error: 'not found' }, 404);
+    const active = (await db.query(
+      `select id from runs where org_id = $1 and status in ('queued', 'running') order by started_at desc`, [org(c)]
+    )).rows;
+    if (active.length >= 3) return c.json({ error: 'three runs are already going for this organization; wait for one to finish', runId: active[0].id }, 429);
     const { runId, status } = await orchestrator.enqueue(a, { trigger: 'manual' });
     return c.json({ runId, status }, 202);
   });
@@ -405,12 +467,16 @@ export function createApp({ db, baseUrl }) {
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [id('dec'), org(c), r.agent_id, r.id, probeId, state, cleanNote, who.id, who.email || who.name || who.id, entry.seq, entry.entry_hash]
     );
-    await integration('supermemory', 'rememberDecision', { orgId: org(c), agentId: r.agent_id, probeId, state, note: cleanNote });
+    // Supermemory gets the decision state only; note text never leaves Loxe.
+    await integration('supermemory', 'rememberDecision', { orgId: org(c), agentId: r.agent_id, probeId, state });
     return c.json({ state, by: who.email || who.name, at: ts, note: cleanNote, ledgerSeq: entry.seq, entryHash: entry.entry_hash });
   });
 
   api.get('/integrations', async (c) => c.json({ ...(await integrationStatus()), auth: { provider: authProvider() } }));
-  api.get('/maritime/agents', async (c) => c.json((await integration('maritime', 'listAgents')) || []));
+  // The Maritime key is the operator's account, so its agent list is shown only to orgs named in
+  // LOXE_MARITIME_ORGS. Other orgs paste their Maritime agent's URL instead.
+  const maritimeAllowed = (orgId) => (process.env.LOXE_MARITIME_ORGS || '').split(',').map((x) => x.trim()).includes(orgId);
+  api.get('/maritime/agents', async (c) => c.json(maritimeAllowed(org(c)) ? (await integration('maritime', 'listAgents')) || [] : []));
   api.get('/memory/:agentId', async (c) => {
     const a = await agentRow(c.req.param('agentId'), org(c));
     if (!a) return c.json({ error: 'not found' }, 404);

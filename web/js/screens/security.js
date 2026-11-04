@@ -5,7 +5,7 @@ import { setContext } from '../owl.js';
 const REACH = [
   ['Sends chat messages to the endpoint you paste.', 'Log into your cloud, read your code or change your config.'],
   ['Uses the one auth header you add for that endpoint, if any.', 'Show that header back, put it in a report, or send it anywhere else.'],
-  ['Reads public metadata at /.well-known/agent.json if you publish it.', 'Crawl other paths, follow redirects into private networks, or probe internal IPs.'],
+  ['Reads public metadata at /.well-known/agent.json if you publish it.', 'Crawl other paths, follow redirects, or reach private or internal addresses.'],
 ];
 const INCLUDED = [
   'Agent name and ID',
@@ -25,9 +25,9 @@ const KEPT_OUT = [
   'Anything from your other agents or your organization',
 ];
 const WHO = [
-  ['Anyone with your share link', 'Grade, findings, framework mapping, hashes and the PDF. Turn the link off any time.'],
+  ['Anyone with your share link', 'Grade, findings, framework mapping, hashes and the PDF. The link is off until you turn it on.'],
   ['Your organization', 'Everything above, plus raw transcripts, decision notes and their authors, the endpoint URL and run history.'],
-  ['Loxe', 'Stores it to run the service. Auth headers are encrypted at rest. Transcripts are deleted when you delete the agent.'],
+  ['Loxe', 'Stores it to run the service. Auth headers are encrypted at rest. Supermemory keeps run history and decision states, never your notes or transcripts.'],
 ];
 const PROOF = [
   'Code decides every verdict. No model judges pass or fail.',
@@ -38,7 +38,7 @@ const PROOF = [
 ];
 const CONTROL = [
   ['Export', 'Download any agent\'s full ledger and verify it on your own machine.'],
-  ['Share', 'Each agent\'s public page and PDF can be switched off on its Share tab.'],
+  ['Share', 'Each agent starts private. Turn its public page and PDF on or off from its Share tab.'],
   ['Delete', 'Deleting an agent removes its transcripts, decision notes and stored auth header. Its hashes stay so past reports still verify.'],
   ['Keys', 'Create and revoke API keys on the Connect page. Keys are stored as hashes; we show each one once.'],
 ];

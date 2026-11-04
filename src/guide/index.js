@@ -49,8 +49,8 @@ export function buildOwlMessages({ question, route, run, probeId }) {
   const system = [
     FACTS,
     `Controls Loxe maps to:\n${controls}`,
-    route ? `The user is on screen: ${route}.` : '',
-    probeContext(probeId),
+    route ? `The user is on screen: ${String(route).replace(/[^\w#/:-]/g, '').slice(0, 100)}.` : '',
+    probeContext(/^[A-Z]{2,4}-\d{2,3}$/.test(probeId || '') ? probeId : null),
     reportContext(run, probeId),
   ].filter(Boolean).join('\n\n');
   return [

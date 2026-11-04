@@ -10,6 +10,7 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { sha256 } from '../core/canonical.js';
 
 const DEV_COOKIE = 'loxe_dev';
+const userCache = new Map();
 
 export function authProvider() {
   if (process.env.CLERK_SECRET_KEY) return 'clerk';
@@ -57,12 +58,21 @@ export function createAuth(db) {
     const { verifyToken, createClerkClient } = await import('@clerk/backend');
     let claims;
     try {
-      claims = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+      // Only tokens minted for this app's own origin are accepted.
+      const parties = (process.env.LOXE_BASE_URL ? [new URL(process.env.LOXE_BASE_URL).origin] : []);
+      claims = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY, ...(parties.length ? { authorizedParties: parties } : {}) });
     } catch {
       return null;
     }
-    const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
-    const u = await clerk.users.getUser(claims.sub);
+    // Profile lookups are cached for 5 minutes: runs poll every second and Clerk rate-limits.
+    let u = userCache.get(claims.sub);
+    if (!u || u.exp < Date.now()) {
+      const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+      u = { user: await clerk.users.getUser(claims.sub), exp: Date.now() + 5 * 60_000 };
+      userCache.set(claims.sub, u);
+      if (userCache.size > 5000) userCache.delete(userCache.keys().next().value);
+    }
+    u = u.user;
     const email = u.primaryEmailAddress?.emailAddress || u.emailAddresses?.[0]?.emailAddress || claims.sub;
     const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || email;
     // Session token v2 nests the active org under `o` ({ id, slg, rol }); v1 used org_id/org_slug.
@@ -100,6 +110,13 @@ export function createAuth(db) {
 
   // Hono middleware: 401 unless identified; sets c.var.auth.
   const requireAuth = async (c, next) => {
+    const usesCookie = !(c.req.header('authorization') || '').startsWith('Bearer ');
+    if (usesCookie && !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
+      const origin = c.req.header('origin');
+      const self = new URL(c.req.url).origin;
+      const allowed = [self, process.env.LOXE_BASE_URL && new URL(process.env.LOXE_BASE_URL).origin].filter(Boolean);
+      if (!origin || !allowed.includes(origin)) return c.json({ error: 'cross-site request refused' }, 403);
+    }
     const who = await identify(c);
     if (!who) return c.json({ error: 'sign in required' }, 401);
     c.set('auth', who);

@@ -13,9 +13,9 @@ export function createDemo({ db, orchestrator, baseUrl }) {
     const lib = loadLibrary();
     await db.query(`insert into orgs (id, name) values ($1, 'Loxe demo') on conflict (id) do nothing`, [DEMO_ORG]);
     await db.query(
-      `insert into agents (id, name, url, headers, owner_id, org_id, source)
-       values ($1, 'HelixDesk support agent (demo)', $2, '{}', 'demo', $3, 'url')
-       on conflict (id) do update set url = excluded.url, archived_at = null`,
+      `insert into agents (id, name, url, headers, owner_id, org_id, source, is_public)
+       values ($1, 'HelixDesk support agent (demo)', $2, null, 'demo', $3, 'url', true)
+       on conflict (id) do update set url = excluded.url, archived_at = null, is_public = true`,
       [DEMO_AGENT, `${baseUrl}/demo/agent`, DEMO_ORG]
     );
     const agent = (await db.query(`select * from agents where id = $1`, [DEMO_AGENT])).rows[0];

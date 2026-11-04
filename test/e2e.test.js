@@ -36,7 +36,7 @@ let cookie = '';
 const call = async (method, path, body, headers = {}) => {
   const res = await app.request(path, {
     method,
-    headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...headers },
+    headers: { 'content-type': 'application/json', origin: 'http://localhost', ...(cookie ? { cookie } : {}), ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   const sc = res.headers.get('set-cookie');
@@ -52,6 +52,10 @@ ok(me.org.id === 'dev:loxe.ai', 'org resolved from sign-in');
 
 const agent = (await call('POST', '/api/agents', { name: '<script>alert(1)</script>', url: targetUrl })).body;
 ok(agent.id?.startsWith('agent-'), 'agent registered');
+ok(agent.public === false, 'new agents are private by default');
+ok((await call('GET', `/a/${agent.id}`)).status === 404, 'private agent page is hidden');
+ok((await app.request('/api/agents/' + agent.id + '/visibility', { method: 'POST', headers: { cookie, 'content-type': 'application/json', origin: 'https://evil.example' }, body: '{"public":true}' })).status === 403, 'cross-site cookie request refused');
+ok((await call('POST', `/api/agents/${agent.id}/visibility`, { public: true })).body.public === true, 'owner turns the public link on');
 
 const queued = await call('POST', `/api/agents/${agent.id}/runs`);
 ok(queued.status === 202 && queued.body.status === 'queued', 'run is queued (async)');
@@ -82,6 +86,7 @@ ok((await call('GET', `/verify/${agent.id}`)).body.valid, 'chain still verifies 
 // Tamper: the trigger blocks UPDATE, so prove detection on an exported copy.
 const exp = (await call('GET', `/ledger/${agent.id}/export`)).body;
 ok(verifyRows(agent.id, exp.entries).valid, 'exported ledger verifies offline');
+ok((await call('GET', '/verify/agent-000000000000')).status === 404, 'unknown agent is 404, never valid');
 const forged = structuredClone(exp.entries);
 const flip = { pass: 'fail', fail: 'pass', inconclusive: 'pass' };
 forged[1].payload = forged[1].payload.replace(/"status":"(\w+)"/, (_, s) => `"status":"${flip[s]}"`);
@@ -133,6 +138,7 @@ const sec = (await call('POST', '/api/agents', { name: 'with header', url: targe
 const stored = (await db.query(`select headers from agents where id = $1`, [sec.id])).rows[0].headers;
 ok(stored.startsWith('enc:v1:') && !stored.includes('super-secret-token'), 'auth header encrypted at rest');
 ok(!JSON.stringify((await call('GET', `/api/agents/${sec.id}`)).body).includes('super-secret'), 'auth header never returned');
+await call('POST', `/api/agents/${sec.id}/visibility`, { public: true });
 const secRun = (await call('POST', `/api/agents/${sec.id}/runs`)).body;
 await orchestrator.perAgent.get(sec.id);
 ok((await call('GET', `/api/runs/${secRun.runId}`)).body.status === 'completed', 'run decrypts the header and completes');
@@ -156,4 +162,8 @@ ok(js.status === 200 && (js.headers.get('content-type') || '').includes('javascr
 
 target.close();
 await db.close();
+const shdr = (await app.request('/app/')).headers;
+ok((shdr.get('content-security-policy') || '').includes("frame-ancestors 'none'") && shdr.get('strict-transport-security') && shdr.get('x-content-type-options') === 'nosniff', 'security headers set');
+const big = await call('POST', '/api/agents', { name: 'x'.repeat(70000), url: targetUrl });
+ok(big.status === 413, 'oversized body refused');
 console.log('✓ e2e passed');

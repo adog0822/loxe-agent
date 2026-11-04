@@ -131,7 +131,7 @@ export const explainFinding = defineTool({
         fix: f.engineer?.remediation?.summary ?? null,
         controls: (f.auditor?.controls || []).map((c) => `${c.framework} ${c.id}: ${c.title}`),
         evidenceHash: f.auditor?.evidence?.hash ?? null,
-        decision: f.decision,
+        decision: f.decision ? { state: f.decision.state, at: f.decision.at } : null, // author and note stay in the web app
         replay: `${baseUrl}/replay/${run.id}`,
       };
     }),
