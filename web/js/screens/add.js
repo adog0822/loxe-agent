@@ -8,7 +8,7 @@ export async function render(main, ctx) {
       <div>
         <a class="crumb" href="#/">All agents</a>
         <div style="margin-top:var(--s3)">${h1('Add an agent.')}</div>
-        <p class="lede">Loxe sends fixed JSON messages to the endpoint and reads the replies. The same probes run every time, so two runs of the same build give the same grade.</p>
+        <p class="lede">Loxe attacks the agent with 40 safety tests and grades every reply with code, so the same build always gets the same grade.</p>
       </div>
       <div class="split split--60">
         <form class="panel" id="addform" novalidate>
@@ -51,6 +51,7 @@ export async function render(main, ctx) {
     </section>`);
 
   const form = $('#addform', main);
+  if (ctx.query.url) { $('#f-url', form).value = ctx.query.url; $('#f-name', form).value = ctx.query.name || ''; }
   let mode = 'run';
   $$('button[type="submit"]', form).forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; }));
   const urlIn = $('#f-url', form);

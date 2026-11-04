@@ -2,6 +2,11 @@
 import { api } from '../api.js';
 import { html, raw, $, $$, seal, strip, stripFromFindings, mark, ago, until, isStale, skeleton, Word, word, plural, h1, CATEGORY_ORDER, CATEGORY_PREFIX } from '../ui.js';
 import { attention, startRun } from './common.js';
+import { firstAgentForm, bindFirstAgent } from './first-agent.js';
+import { getPrefs, orderFrameworks, alertLabel } from '../prefs.js';
+import { setContext } from '../owl.js';
+
+const FW = { soc2: 'SOC 2', 'owasp-llm': 'OWASP', 'nist-ai-rmf': 'NIST AI RMF', iso42001: 'ISO 42001' };
 
 let arrivedOnce = false;
 
@@ -18,27 +23,24 @@ export async function render(main, ctx) {
   const runs = await Promise.all(agents.map((a) => (a.lastRunId ? api.run(a.lastRunId).catch(() => null) : null)));
   if (!ctx.alive()) return;
 
+  const prefs = getPrefs(ctx.session.user?.id) || {};
   if (!agents.length) {
     main.innerHTML = String(html`
       <section class="page">
         <div class="split split--hub">
-          <div class="hero">
-            <div class="hero__top"><span class="mark mark--pending" aria-hidden="true"></span>Nothing to clear yet</div>
-            <div>
-              ${h1('Add your first agent.')}
-              <p class="lede">Paste an endpoint or pick a Maritime agent. Loxe runs a fixed battery of probes against it, grades it A to F and writes every result to a ledger a buyer can check without asking you.</p>
-            </div>
-            <div class="hero__foot"><a class="btn btn--primary" href="#/add" data-autofocus>Add an agent</a></div>
+          <div class="hero hero--form">
+            ${firstAgentForm(prefs)}
           </div>
           <div class="rail">
-            <div class="h3">What happens next</div>
+            <h2 class="h3">What happens when you click</h2>
             <ol class="rail__list">
-              ${[['Add', 'Point Loxe at the URL your agent answers on.'], ['Run', 'Probes tick through five categories while you watch.'], ['Share', 'Send a public clearance page, a badge and a PDF.']].map(([t, d], i) => html`<li class="rail__item"><span class="rank">${i + 1}</span><div><div class="rail__name">${t}</div><p class="rail__why">${d}</p></div><span></span></li>`)}
+              ${[['Attack', 'Loxe sends your agent 40 tests: leaking data, misusing tools, obeying hidden instructions, doing harm.'], ['Grade', 'Each reply is checked by code, not by an AI, and the agent gets a grade from A to F.'], ['Prove', 'You get a report and a link anyone can open to check the results are real.']].map(([t, d], i) => html`<li class="rail__item"><span class="rank">${i + 1}</span><div><div class="rail__name">${t}</div><p class="rail__why">${d}</p></div><span></span></li>`)}
             </ol>
+            <p class="hint">Want to see it first? Switch on <b>Demo</b> in the top bar.</p>
           </div>
         </div>
-        ${intStrip(ints)}
       </section>`);
+    bindFirstAgent(main, ctx);
     return;
   }
 
@@ -46,16 +48,28 @@ export async function render(main, ctx) {
   const hero = ranked[0];
   const allClear = hero.score === 0;
   const rail = ranked.slice(1).filter((x) => x.score > 0).slice(0, 4);
+  // The welcome answers add setup moves to the rail, and pick which framework the hero quotes.
+  const fw = orderFrameworks(Object.keys(FW), prefs)[0];
+  if (hero.finding) {
+    const c = hero.finding.auditor?.controls?.find((x) => x.framework === fw);
+    if (c) hero.rule = `${hero.rule} Fails ${FW[fw]} ${c.id}, ${c.title.charAt(0).toLowerCase() + c.title.slice(1)}.`;
+  }
+  const setup = [];
+  if (prefs.alerts && prefs.alerts !== 'none' && ints?.keiki && !ints.keiki.configured) setup.push({ mark: 'off', name: `Alerts on ${alertLabel(prefs.alerts)}`, why: 'Keiki is not configured, so nobody hears when a grade drops.', href: '#/integrations', verb: 'Set up' });
+  if (prefs.where === 'maritime' && !agents.some((a) => a.source === 'maritime')) setup.push({ mark: 'pending', name: 'Your Maritime agents', why: 'None cleared yet. One click each.', href: '#/connect?to=maritime', verb: 'Pick' });
+  if (prefs.where === 'keiki') setup.push({ mark: 'pending', name: 'Clear from Keiki', why: 'Text clear and a URL to the Loxe agent.', href: '#/connect?to=keiki', verb: 'How' });
+  setContext({ route: 'hub', agentId: hero.agent.id, runId: hero.run?.id }, ['What should I do first?', 'How is this list ranked?', 'What does a grade mean?']);
   const runningCount = ranked.filter((x) => x.state === 'running').length;
   const needCount = ranked.filter((x) => x.score >= 30).length;
 
   main.innerHTML = String(html`
     <section class="page">
+      ${ctx.query.first ? html`<section class="firstbox"><h2 class="h2">Test one of your own agents.</h2>${firstAgentForm(prefs, { compact: true })}</section>` : ''}
       <div class="split split--hub">
         ${allClear ? heroAllClear(agents) : heroTile(hero, needCount)}
         <div class="rail">
           <div class="section-head"><h2 class="h3">Next up</h2><span class="small">Ranked by what needs you</span></div>
-          ${rail.length ? html`<ol class="rail__list">${rail.map(railItem)}</ol>` : html`<div class="rail__list rail__empty">${allClear ? 'Sentinel re-checks every agent on schedule. You will see it here if something changes.' : 'Nothing else is waiting. Every other agent is cleared.'}</div>`}
+          ${rail.length || setup.length ? html`<ol class="rail__list">${rail.slice(0, 4 - Math.min(setup.length, 2)).map(railItem)}${setup.slice(0, 2).map((x) => html`<li class="rail__item">${mark(x.mark)}<div><div class="rail__name">${x.name}</div><p class="rail__why">${x.why}</p></div><a class="btn btn--s" href="${x.href}">${x.verb}</a></li>`)}</ol>` : html`<div class="rail__list rail__empty">${allClear ? 'Sentinel re-checks every agent on schedule. You will see it here if something changes.' : 'Nothing else is waiting. Every other agent is cleared.'}</div>`}
         </div>
       </div>
 
@@ -71,12 +85,13 @@ export async function render(main, ctx) {
         </table>
         </div>
       </div>
-      ${intStrip(ints)}
-      <p class="hint">Press <kbd>Enter</kbd> to take the next move. <kbd>Esc</kbd> brings you back here from anywhere.</p>
+
     </section>`);
 
   const heroEl = $('.hero', main);
   if (!arrivedOnce) { heroEl.classList.add('is-arriving'); arrivedOnce = true; }
+  bindFirstAgent(main, ctx);
+  if (ctx.query.first) $('#fa-url', main)?.focus();
   $$('[data-start]', main).forEach((b) => b.addEventListener('click', () => startRun(b.dataset.start, ctx.go, b)));
   $$('.roster tbody tr', main).forEach((tr) => tr.addEventListener('click', (e) => { if (!e.target.closest('a, button')) ctx.go(tr.dataset.href); }));
 

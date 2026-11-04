@@ -2,6 +2,15 @@
 import { api } from '../api.js';
 import { html, raw, $, mark, seal, h1, when, CATEGORY_ORDER, CATEGORY_LABEL, CATEGORY_PREFIX, short, toast } from '../ui.js';
 import { agentHeader, bindRunButtons, startRun } from './common.js';
+import { PROBE, LIBRARY } from '../probes.js';
+import { setContext, say } from '../owl.js';
+
+// One line about the probe in flight, from the client copy of the battery. Falls back to the bare ID.
+export function probeLine(id, version) {
+  const p = PROBE[id];
+  if (!p || (version && version !== LIBRARY.version && !PROBE[id])) return `Sending probe ${id}.`;
+  return `Sending probe ${id}: ${p.checks.replace(/\.$/, '')}.`;
+}
 
 export async function render(main, ctx) {
   const runId = ctx.params[0];
@@ -16,6 +25,8 @@ export async function render(main, ctx) {
   let lastDone = 0;
   let lastCat = CATEGORY_ORDER[0];
   const t0 = new Date(run.startedAt).getTime();
+  let lastCtx = null;
+  let announced = false;
 
   main.innerHTML = String(html`
     <section class="page">
@@ -31,10 +42,6 @@ export async function render(main, ctx) {
           <div id="after" style="margin-top:var(--s5)"></div>
         </div>
         <aside class="side">
-          <div class="panel">
-            <h2 class="h3">What Loxe is doing</h2>
-            <p class="body" id="doing"></p>
-          </div>
           <div class="panel">
             <h2 class="h3">This run</h2>
             <dl class="facts" style="margin-top:var(--s3)">
@@ -61,16 +68,13 @@ export async function render(main, ctx) {
     const cur = r.progress.current;
     const curCat = cur ? CATEGORY_PREFIX[cur.split('-')[0]] || lastCat : lastCat;
     let delta = done - lastDone;
-    let i = CATEGORY_ORDER.indexOf(lastCat);
-    while (delta > 0 && i < CATEGORY_ORDER.length) {
-      const c = CATEGORY_ORDER[i];
-      const room = c === curCat || i === CATEGORY_ORDER.length - 1 ? delta : Math.max(0, per - laneDone[c]);
-      const add = Math.min(room, delta);
-      laneDone[c] += add;
-      delta -= add;
-      if (c === curCat) break;
-      i++;
-    }
+    if (lastDone === 0 && cur) lastCat = curCat;
+    // Probes finished since the last poll belong to the lane that was running, up to its share;
+    // anything beyond that belongs to the lane running now. Works whatever order the battery uses.
+    const first = lastCat === curCat ? delta : Math.min(Math.max(0, per - laneDone[lastCat]), delta);
+    laneDone[lastCat] += first;
+    delta -= first;
+    if (delta > 0) laneDone[curCat] += delta;
     if (cur && cur !== log[0]?.id) log.unshift({ t: Date.now(), id: cur, cat: curCat });
     lastCat = curCat;
     lastDone = done;
@@ -80,8 +84,8 @@ export async function render(main, ctx) {
     const done = r.progress.done;
     const finished = r.status === 'completed';
     const title = $('#title', main);
-    if (r.status === 'queued') title.innerHTML = String(html`${h1(`Queued for ${agent.name}.`)}<p class="lede">Loxe starts probing as soon as a worker is free. Usually a second or two.</p>`);
-    else if (r.status === 'running') title.innerHTML = String(html`${h1(`Probing ${agent.name}.`)}<p class="lede">Every probe is a fixed input and a fixed rule. Code decides pass or fail, never a model. You can leave; the run keeps going.</p>`);
+    if (r.status === 'queued') title.innerHTML = String(html`${h1(`Queued for ${agent.name}.`)}<p class="lede liveline">Freezing the battery and hashing it, so this run records which probes it used. Probing starts in a second or two.</p>`);
+    else if (r.status === 'running') title.innerHTML = String(html`${h1(`Probing ${agent.name}.`)}<p class="lede liveline" aria-live="polite">${r.progress.current ? probeLine(r.progress.current, r.libraryVersion) : 'Starting the first probe.'}</p><p class="hint">A fixed rule in code checks each reply, never a model. Each result is hashed into the ledger before the next probe goes out. You can leave; the run keeps going.</p>`);
     else if (r.status === 'failed') title.innerHTML = String(html`${h1('The run stopped.')}<p class="lede">${r.error || 'The run ended without a grade.'} No partial grade was written.</p>`);
     else title.innerHTML = String(html`${h1(`${agent.name} is graded ${r.grade}.`)}<p class="lede">${r.report ? `${r.report.passed} passed, ${r.report.failed} failed, ${r.report.inconclusive} inconclusive. The grade is set by the worst open failure.` : ''}</p>`);
 
@@ -104,15 +108,16 @@ export async function render(main, ctx) {
       return html`<div class="lane ${active ? 'is-active' : ''}"><div class="lane__name">${CATEGORY_LABEL[c]}</div><div class="lane__cells">${cells.map((s) => html`<span class="cell cell--${s}"></span>`)}</div><div class="lane__count">${d} done</div></div>`;
     })}`);
 
-    const doing = $('#doing', main);
-    if (r.status === 'queued') doing.textContent = 'Freezing the battery and hashing it, so this run records which probes it used, down to the byte.';
-    else if (r.status === 'running') doing.innerHTML = String(html`Sending probe <code class="mono">${r.progress.current || '...'}</code> and checking the reply against its rule. Each result is hashed and appended to the ledger before the next probe starts.`);
-    else if (r.status === 'failed') doing.textContent = 'Nothing. The run stopped and the probes that did finish stay in the ledger.';
-    else doing.innerHTML = String(html`Done. ${r.report?.total ?? total} results are in the ledger, chained to head <code class="mono">${short(r.report?.ledger?.head, 12)}</code>.`);
 
     $('#log', main).innerHTML = String(html`${log.slice(0, 60).map((l) => html`<li><span>${new Date(l.t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })}</span><span>${l.id}</span><span>${CATEGORY_LABEL[l.cat]}</span></li>`)}${!log.length ? html`<li><span></span><span></span><span>Waiting for the first probe.</span></li>` : ''}`);
 
+    if (r.progress.current && r.progress.current !== lastCtx) {
+      lastCtx = r.progress.current;
+      setContext({ route: 'runs', agentId: agent.id, runId: r.id, probeId: r.progress.current }, [`What is ${r.progress.current} testing?`, 'Why is no model deciding pass or fail?', 'What happens if the agent goes down mid-run?']);
+    }
     const after = $('#after', main);
+    if (finished && !announced) { announced = true; say(`Done. Graded ${r.grade}, all ${r.progress.total} results are in the ledger.`); }
+    if (r.status === 'failed' && !announced) { announced = true; say('The run stopped. Nothing partial was graded.'); }
     if (finished) {
       after.innerHTML = String(html`<div class="row row--l"><a class="btn btn--primary" href="#/agents/${agent.id}/report?run=${r.id}" data-autofocus>Open the report card</a><a class="btn" href="#/agents/${agent.id}/ledger">Verify the ledger</a></div>`);
       $('[data-autofocus]', after)?.focus({ preventScroll: true });
@@ -129,7 +134,7 @@ export async function render(main, ctx) {
   if (run.status === 'completed' || run.status === 'failed') return;
 
   let stopped = false;
-  ctx.onLeave(() => { stopped = true; });
+  ctx.onLeave(() => { stopped = true; say(''); });
   let misses = 0;
   const poll = async () => {
     if (stopped) return;

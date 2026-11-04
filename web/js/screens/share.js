@@ -1,5 +1,6 @@
 // Share: public clearance page, badge embed, PDF. Plus what the claim says and does not say.
-import { badgeSrc, publicUrl, MOCK } from '../api.js';
+import { badgeSrc, publicUrl, isDemo } from '../api.js';
+import { setContext } from '../owl.js';
 import { html, $, $$, mark, h1, day, word, esc } from '../ui.js';
 import { agentHeader, bindRunButtons, loadAgent, loadReport, openFails } from './common.js';
 
@@ -17,6 +18,7 @@ export async function render(main, ctx) {
     html: `<a href="${page}"><img src="${badge}" alt="Loxe clearance for ${agent.name}" height="24"></a>`,
   };
   const open = rep ? openFails(rep).length : 0;
+  setContext({ route: 'share', agentId: agent.id, runId: rep?.runId }, ['What does the public page claim?', 'Is this a certification?', 'Will the badge change if the grade drops?']);
 
   main.innerHTML = String(html`
     <section class="page">
@@ -32,7 +34,7 @@ export async function render(main, ctx) {
             <h2 class="h3">Public clearance page</h2>
             <p class="body">Anyone with the link can open it. It shows no headers, keys or transcripts.</p>
             <div class="copyfield"><input class="input" readonly value="${page}" aria-label="Public page URL"><button class="btn btn--primary" data-copy="${page}" data-copy-label="Page link copied" data-autofocus>Copy link</button></div>
-            <div class="row" style="margin-top:var(--s3)"><a class="link" href="${page}" target="_blank" rel="noopener">Open the public page</a>${MOCK ? html`<span class="small">The backend serves this page; sample data has none.</span>` : ''}</div>
+            <div class="row" style="margin-top:var(--s3)"><a class="link" href="${page}" target="_blank" rel="noopener">Open the public page</a>${isDemo() ? html`<span class="small">In the demo there is no server behind this link.</span>` : ''}</div>
           </div>
           <div class="panel">
             <h2 class="h3">Badge</h2>

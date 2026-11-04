@@ -11,8 +11,11 @@ the default; dark is a full token set for late sessions and follows the OS unles
 ## Files
 - `css/tokens.css`: every value (type, space, radius, colour light and dark, motion, layers).
 - `css/app.css`: components. No value in it that is not a token, except 1px and 2px geometry.
-- `js/app.js` shell, auth and router; `js/api.js` client; `js/mock.js` fixtures for `?mock=1`;
+- `js/app.js` shell, auth, router, demo switch; `js/api.js` client (swaps to the demo fixtures when demo is on);
+  `js/mock.js` demo backend; `js/owl.js` guide panel and narration; `js/tour.js` guided demo; `js/prefs.js`
+  first-run answers; `js/probes.js` and `js/controls-data.js` client copies of the battery and controls table;
   `js/canonical.js` the browser twin of `src/core/canonical.js`; `js/screens/*` one file per screen.
+- `assets/owl.png` is the LoxeAI owl, copied byte for byte from the platform. It is never redrawn.
 
 ## Type
 - Bodoni Moda (opsz axis, weight 500 to 600) only for: word-only H1s, the grade letter, the report cover headline.
@@ -32,8 +35,9 @@ water, not navy, not cream). Colour appears only when state changes:
 | `--gap` / `--gap-fill` | oklch 0.53 0.195 27 / 0.60 0.215 27 | 0.72 0.18 32 | Failing, open, broken |
 | `--stale` / `--stale-fill` | oklch 0.50 0.10 72 / 0.76 0.14 78 | 0.83 0.12 82 | Inconclusive, out of date |
 
-`*-wash` tints back verdict panels. `*-live` versions sit on the hero tile, which is ink in light
-mode and a raised slab (`--hero-bg`) in dark mode. Text pairs clear 4.5:1; marks clear 3:1.
+`*-wash` tints back verdict panels. The hero tile is a light surface (`--hero-bg` = `--surface`); ink is
+for type and the primary button only. Amber also marks the demo workspace (band, toggle, tour card),
+because demo data is not live evidence. Text pairs clear 4.5:1; marks clear 3:1.
 The primary action is ink, never a colour. No gradients except the hatch patterns of state marks
 and the skeleton shimmer.
 
@@ -48,6 +52,16 @@ Shape carries meaning before colour, so the marks survive greyscale and colour b
   are ink outlines with a red cut corner, never-graded is dotted, stale adds a hatched band, running fills.
 - Probe strip: one cell per probe, grouped by the five categories. Failing cells are taller and cut,
   so a run reads like a barcode of its gaps at any size.
+
+## Shell and the owl
+- Top bar: owl mark and "Loxe", three items (Agents, Add agent, Connect), a quiet "What is Loxe" link,
+  the Demo switch, and an account menu (settings, API keys, theme, sign out). Integration status never
+  sits on the hub; it lives on the Integrations page and surfaces only when something the user set up breaks.
+- The owl button sits bottom right on every screen. It opens a side panel (a bottom sheet on phones) with
+  questions written for the current screen, free-text questions to `POST /api/owl`, and the demo tour.
+  `say()` is its one-line narration of whatever the app is doing (sending a probe, writing a decision).
+- First sign-in: the owl asks three questions (where the agent lives, frameworks, alerts), stored per user
+  in localStorage, then offers one move: "Test my agent" with the URL field right there.
 
 ## Layout
 - Hub, 7/4: the hero tile holds the next move (default focus, so Enter does it); the rail ranks the

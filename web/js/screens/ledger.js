@@ -4,6 +4,7 @@ import { api, publicUrl, request } from '../api.js';
 import { html, raw, $, $$, mark, h1, short, when, toast } from '../ui.js';
 import { GENESIS, entryHash } from '../canonical.js';
 import { agentHeader, bindRunButtons, loadAgent, loadReport } from './common.js';
+import { setContext, say } from '../owl.js';
 
 export async function render(main, ctx) {
   const { agent, run } = await loadAgent(ctx.params[0]);
@@ -13,7 +14,8 @@ export async function render(main, ctx) {
 
   // Entries: prefer a full ledger listing if the server offers one; otherwise use the evidence
   // references carried by the latest report (seq, payload hash, entry hash per probe).
-  let entries = await request('GET', `/api/agents/${agent.id}/ledger`).then((r) => r?.entries || r).catch(() => null);
+  let entries = await api.ledger(agent.id).then((r) => r?.entries || r).catch(() => null);
+  setContext({ route: 'ledger', agentId: agent.id, runId: shown?.report?.runId }, ['What is SHA-256 doing here?', 'What happens if someone edits an entry?', 'How can a buyer check this without me?']);
   let source = 'ledger';
   if (!Array.isArray(entries)) {
     source = 'report';
@@ -41,11 +43,12 @@ export async function render(main, ctx) {
           ${entries.length ? html`
           <div class="panel" style="margin-top:var(--s5)">
             <div class="tracehead"><span style="text-align:right">Entry</span><span></span><span class="cols"><span>Previous hash</span><span>Evidence hash</span><span class="computed">Recomputed entry hash</span></span><span style="text-align:right">Result</span></div>
-            <div class="tracebox"><ol class="trace" id="trace">${entries.map((e) => html`<li class="tr" data-seq="${e.seq}" title="${e.label || ''}">
+            <div class="tracebox"><ol class="trace" id="trace">${entries.map((e) => html`<li class="tr ${e.kind === 'decision' ? 'tr--decision' : ''}" data-seq="${e.seq}" title="${e.label || ''}">
               <span class="tr__seq">${e.seq}</span>
               <span class="tr__node"><span class="tr__dot"></span></span>
               <span class="tr__hashes"><span>${e.prevHash ? html`<b>${short(e.prevHash, 12)}</b>` : 'earlier run'}</span><span><b>${short(e.payloadHash, 12)}</b></span><span class="computed"><b>${'.'.repeat(12)}</b></span></span>
               <span class="tr__label">waiting</span>
+              ${e.label ? html`<span class="tr__what">${e.label}</span>` : ''}
             </li>`)}</ol></div>
           </div>` : ''}
         </div>
@@ -90,6 +93,7 @@ async function trace(main, ctx, agent, entries, btn) {
   verdict.innerHTML = String(html`<div class="verdict__head"><span class="mark mark--running" aria-hidden="true"></span><h2 class="h3">Recomputing</h2></div><p class="body">Asking the server to check the full chain at the same time.</p>`);
 
   const server = api.verify(agent.id).catch((e) => ({ unreachable: e }));
+  say(`Recomputing ${entries.length} entry hashes in your browser while the server checks the whole chain.`, { sticky: true });
   let firstBad = null;
   let prevComputed = null;
   for (let i = 0; i < entries.length; i++) {
@@ -115,10 +119,12 @@ async function trace(main, ctx, agent, entries, btn) {
     else { firstBad = e.seq; row.classList.add('is-bad'); label.textContent = 'mismatch'; row.querySelector('.computed b').title = `stored ${e.entryHash}`; }
     prevComputed = computed;
     status.textContent = `Checked ${i + 1} of ${entries.length}.`;
+    if (i % 4 === 0 || i === entries.length - 1) say(`Entry ${e.seq}: sha256 of agent, seq ${e.seq}, previous hash ${short(prev || '', 6)} and evidence ${short(e.payloadHash, 6)} gives ${short(computed, 6)}. ${firstBad === null ? 'Matches.' : 'Unproven.'}`, { sticky: true });
     if (step) await sleep(step / 2);
   }
   const s = await server;
   if (!ctx.alive()) return;
+  say(s.valid && firstBad === null ? `All ${entries.length} entries match. Nobody has changed this evidence.` : 'The chain does not verify. See the verdict.');
   if (innerWidth < 981) requestAnimationFrame(() => verdict.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' }));
   btn.disabled = false;
   btn.textContent = 'Verify again';

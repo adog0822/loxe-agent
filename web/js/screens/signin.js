@@ -1,14 +1,16 @@
 // Sign in. Clerk mounts its own form; dev auth posts an email to /api/dev/login.
 import { api } from '../api.js';
 import { html, $, h1, mark } from '../ui.js';
-import { loadMe, session } from '../app.js';
+import { loadMe, session, enterDemo } from '../app.js';
+import { owlImg } from '../owl.js';
 
 export async function render(main, ctx) {
   const next = ctx.query.next && ctx.query.next.startsWith('#/') && !ctx.query.next.startsWith('#/signin') ? ctx.query.next : '#/';
   if (session.user) { ctx.go(next); return; }
 
   if (session.provider === 'clerk' && session.clerk) {
-    main.innerHTML = String(html`<section class="page signin">${h1('Sign in to Loxe.')}<p class="lede">Your agents, their runs and the ledger are scoped to your organisation.</p><div id="clerk" style="margin-top:var(--s5)"></div></section>`);
+    main.innerHTML = String(html`<section class="page signin">${h1('Sign in to Loxe.')}<p class="lede">Your agents, their runs and the ledger are scoped to your organisation.</p><div id="clerk" style="margin-top:var(--s5)"></div><div class="speech" style="margin-top:var(--s6)">${owlImg(40)}<p class="speech__line">Not ready to sign in? <button class="linkbtn" type="button" id="demo-go">Take the guided demo</button> with sample agents.</p></div></section>`);
+    $('#demo-go', main)?.addEventListener('click', () => enterDemo());
     session.clerk.mountSignIn($('#clerk', main), { afterSignInUrl: location.pathname + location.search + next, signUpUrl: undefined });
     ctx.onLeave(() => { try { session.clerk.unmountSignIn($('#clerk')); } catch {} });
     return;
@@ -27,7 +29,9 @@ export async function render(main, ctx) {
         <button class="btn btn--primary" type="submit" style="margin-top:var(--s4)">Sign in</button>
         <p class="hint" style="margin-top:var(--s4)">No password. Set CLERK_SECRET_KEY on the server for real accounts.</p>
       </form>
+      <div class="speech" style="margin-top:var(--s7)">${owlImg(40)}<p class="speech__line">Not ready to sign in? <button class="linkbtn" type="button" id="demo-go">Take the guided demo</button> with sample agents, or read <a class="link" href="#/why">what Loxe is</a>.</p></div>
     </section>`);
+  $('#demo-go', main)?.addEventListener('click', () => enterDemo());
   const form = $('#dev', main);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

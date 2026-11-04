@@ -1,7 +1,18 @@
 // API client. Relative URLs, Bearer token for Clerk, cookie for dev auth.
 // In ?mock=1 every call is answered by js/mock.js instead of the network.
 
+// Two ways into the demo workspace: ?mock=1 (whole session, for development) or the Demo switch in the
+// nav, which flips this flag for the tab. Demo calls never reach the network, so the real workspace
+// is untouched while you are in it.
 export const MOCK = new URLSearchParams(location.search).get('mock') === '1';
+let demo = MOCK;
+try { if (sessionStorage.getItem('loxe-demo') === '1') demo = true; } catch {}
+export const isDemo = () => demo;
+export async function setDemo(on) {
+  demo = MOCK || !!on;
+  try { on ? sessionStorage.setItem('loxe-demo', '1') : sessionStorage.removeItem('loxe-demo'); } catch {}
+  if (on) { const m = await loadMock(); await m.reset(); }
+}
 let mock = null;
 let tokenFn = null;
 let onUnauthorized = () => {};
@@ -24,7 +35,7 @@ async function loadMock() {
 }
 
 export async function request(method, path, body) {
-  if (MOCK) {
+  if (demo) {
     const m = await loadMock();
     // A small, honest delay so loading states are visible in mock mode.
     await new Promise((r) => setTimeout(r, 120 + Math.random() * 160));
@@ -72,7 +83,18 @@ export const api = {
   memory: (id) => request('GET', `/api/memory/${id}`),
   verify: (id) => request('GET', `/verify/${id}`),
   lookupHash: (hash) => request('GET', `/verify?hash=${encodeURIComponent(hash)}`),
+  ledger: (id) => request('GET', `/api/agents/${id}/ledger`),
+  replay: (runId, probeId) => request('POST', `/api/runs/${runId}/replay/${encodeURIComponent(probeId)}`),
+  keys: () => request('GET', '/api/keys'),
+  createKey: (name) => request('POST', '/api/keys', { name }),
+  deleteKey: (id) => request('DELETE', `/api/keys/${id}`),
+  devLogout: () => request('POST', '/api/dev/logout'),
+  owl: (question, context) => request('POST', '/api/owl', { question, context }),
 };
+
+// Where snippets point. On a local or preview host, show the production address.
+export const BASE = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) ? 'https://loxeagent.loxeai.com' : location.origin;
+export const demoApi = () => loadMock();
 
 // Public URLs. Absolute so they can be pasted anywhere.
 export const publicUrl = {
@@ -84,6 +106,6 @@ export const publicUrl = {
 };
 
 export async function badgeSrc(id) {
-  if (MOCK) return (await loadMock()).badgeDataUrl(id);
+  if (demo) return (await loadMock()).badgeDataUrl(id);
   return `/badge/${id}`;
 }

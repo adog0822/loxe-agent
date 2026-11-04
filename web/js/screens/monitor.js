@@ -2,6 +2,8 @@
 import { api } from '../api.js';
 import { html, raw, $, mark, seal, h1, ago, until, when, toast, skeleton, sentence } from '../ui.js';
 import { agentHeader, bindRunButtons, loadAgent } from './common.js';
+import { setContext, say } from '../owl.js';
+import { getPrefs, alertLabel } from '../prefs.js';
 
 const INTERVALS = [[1, 'Every hour'], [6, 'Every 6 hours'], [12, 'Every 12 hours'], [24, 'Every day'], [72, 'Every 3 days'], [168, 'Every week']];
 
@@ -15,6 +17,8 @@ export async function render(main, ctx) {
   if (!ctx.alive()) return;
   const running = run && (run.status === 'queued' || run.status === 'running');
   const keiki = ints?.keiki;
+  const alertPref = alertLabel(getPrefs(ctx.session.user?.id)?.alerts);
+  setContext({ route: 'monitor', agentId: agent.id }, ['How does sentinel work?', 'Where do alerts go?', 'What triggers a re-run?']);
   const sm = ints?.supermemory;
 
   main.innerHTML = String(html`
@@ -39,7 +43,8 @@ export async function render(main, ctx) {
             ${!keiki ? html`<p class="body">${mark('stale', { size: 's' })} Alert status did not load.</p>`
               : !keiki.configured ? html`<p class="body">${mark('off', { size: 's' })} <b>Keiki is not configured.</b> ${sentence(keiki.detail || 'Set KEIKI_API_KEY on the Loxe server')} Sentinel still runs; nobody is told when the grade drops.</p><a class="link" href="#/integrations">See integration setup</a>`
               : keiki.ok === false ? html`<p class="body">${mark('broken', { size: 's' })} <b>Keiki is failing.</b> ${sentence(keiki.detail)}</p>`
-              : html`<p class="body">${mark('ok', { size: 's' })} Keiki alerts the agent owner when a re-run grades lower than the last one, or when the ledger stops verifying.</p>`}
+              : html`<p class="body">${mark('ok', { size: 's' })} Keiki alerts the agent owner${alertPref && alertPref !== 'No alerts' ? ` on ${alertPref}` : ''} when a re-run grades lower than the last one, or when the ledger stops verifying.</p>`}
+            ${alertPref ? html`<p class="hint">You asked for alerts on ${alertPref}. <a class="link" href="#/welcome?again=1">Change it</a>.</p>` : ''}
           </div>
         </div>
         <aside class="side">
@@ -74,7 +79,7 @@ export async function render(main, ctx) {
       agent.sentinel = s;
       $('#s-label', main).textContent = s.enabled ? 'Sentinel is on' : 'Sentinel is off';
       $('#s-next', main).textContent = nextLine(s);
-      toast(s.enabled ? `Sentinel on. Next run ${until(s.nextRunAt)}.` : 'Sentinel off. The clearance date will start to age.');
+      say(s.enabled ? `Sentinel on. Same battery again ${until(s.nextRunAt)}, and on every Maritime deploy.` : 'Sentinel off. The clearance date on the public page will start to age.');
     } catch (e) {
       on.checked = agent.sentinel.enabled;
       toast(`Sentinel not changed: ${e.message}`, 'gap');

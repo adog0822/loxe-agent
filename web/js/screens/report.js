@@ -3,6 +3,8 @@
 import { api, publicUrl } from '../api.js';
 import { html, raw, $, $$, esc, mark, seal, strip, stripFromFindings, findingState, h1, day, when, ago, short, toast, Word, word, plural, SEV_RANK, CATEGORY_ORDER, CATEGORY_LABEL, isStale } from '../ui.js';
 import { agentHeader, bindRunButtons, loadAgent, loadReport, openFails } from './common.js';
+import { setContext, say } from '../owl.js';
+import { getPrefs, orderFrameworks } from '../prefs.js';
 
 const LANGS = [['plain', 'Plain English'], ['engineer', 'Engineer'], ['auditor', 'Auditor']];
 const FW_NAME = { soc2: 'SOC 2', 'owasp-llm': 'OWASP LLM Top 10', 'nist-ai-rmf': 'NIST AI RMF', iso42001: 'ISO/IEC 42001' };
@@ -36,7 +38,8 @@ export async function render(main, ctx) {
   }
 
   const rep = shown.report;
-  const state = { rep, run: shown, agent };
+  const state = { rep, run: shown, agent, prefs: getPrefs(ctx.session.user?.id) };
+  if (['plain', 'engineer', 'auditor'].includes(ctx.query.view)) readAs = ctx.query.view;
   paintAll(main, ctx, state, running ? run : null);
 }
 
@@ -46,8 +49,16 @@ function paintAll(main, ctx, state, liveRun) {
   const inconclusive = rep.findings.filter((f) => f.status === 'inconclusive').sort(bySeverity);
   const passed = rep.findings.filter((f) => f.status === 'pass');
   const open = openFails(rep);
-  const ctl = controlLedger(rep.findings);
+  const ctl = controlLedger(rep);
   const stale = isStale(agent);
+  const fwOrder = orderFrameworks(Object.keys(FW_NAME), state.prefs);
+  const focus = ctx.query.finding || open[0]?.probeId;
+  setContext({ route: 'report', agentId: agent.id, runId: rep.runId, probeId: focus }, [
+    'What does this grade mean?',
+    ...(open[0] ? [`How do I fix ${open[0].probeId}?`] : []),
+    `Which ${FW_NAME[fwOrder[0]]} controls does this touch?`,
+    'Is this a certification?',
+  ]);
 
   main.innerHTML = String(html`
     <section class="page">
@@ -88,8 +99,8 @@ function paintAll(main, ctx, state, liveRun) {
           </details>
         </div>
 
-        <aside class="side">
-          <div class="panel">
+        <aside class="side side--quiet">
+          <section>
             <h2 class="h3">By category</h2>
             <div style="margin-top:var(--s3)">
             ${CATEGORY_ORDER.map((c) => {
@@ -99,42 +110,35 @@ function paintAll(main, ctx, state, liveRun) {
               return html`<div class="catrow"><span class="label">${k.label || CATEGORY_LABEL[c]}</span><span class="catrow__n">${k.passed} of ${k.total}</span>${strip(stripFromFindings(fs), { size: 's', label: `${k.label}: ${k.passed} passed, ${k.failed} failed, ${k.inconclusive} inconclusive` })}</div>`;
             })}
             </div>
-          </div>
+          </section>
 
-          <div class="panel">
+          <section>
             <h2 class="h3">Does not adhere to</h2>
-            ${ctl.fail.length ? controlGroups(ctl.fail, 'fail') : html`<p class="body">${mark('pass', { size: 's' })} Every mapped control holds for these probes.</p>`}
-          </div>
+            ${ctl.fail.length ? controlGroups(ctl.fail, 'fail', fwOrder, rep) : html`<p class="body">${mark('pass', { size: 's' })} Every mapped control holds for these probes.</p>`}
+          </section>
 
-          <div class="panel">
+          <section>
             <h2 class="h3">Adheres to</h2>
             <p class="body small">Every probe mapped to these controls passed.</p>
-            ${ctl.pass.length > 6
-              ? html`${controlGroups(ctl.pass.slice(0, 6), 'pass')}<details class="more"><summary>${ctl.pass.length - 6} more</summary>${controlGroups(ctl.pass.slice(6), 'pass')}</details>`
-              : controlGroups(ctl.pass, 'pass')}
-            ${ctl.undecided.length ? html`<h3 class="label" style="margin-top:var(--s4)">Not yet determined</h3>${controlGroups(ctl.undecided, 'inconclusive')}` : ''}
-          </div>
+            <details class="more"><summary>Show ${ctl.pass.length} ${plural(ctl.pass.length, 'control')}</summary>${controlGroups(ctl.pass, 'pass', fwOrder, rep)}</details>
+            ${ctl.undecided.length ? html`<details class="more"><summary>${ctl.undecided.length} not yet determined</summary>${controlGroups(ctl.undecided, 'inconclusive', fwOrder, rep)}</details>` : ''}
+            <p class="hint" style="margin-top:var(--s3)">A probe mapped to a control is evidence for it, not proof that the whole control is met.</p>
+          </section>
 
-          <div class="panel">
-            <h2 class="h3">Frameworks mapped</h2>
-            <ul class="claim">${rep.frameworks.map((f) => html`<li><span></span><span><b>${f.name}</b> <span class="small">${f.version}</span></span></li>`)}</ul>
-            <p class="hint" style="margin-top:var(--s2)">Mapping a probe to a control shows what the probe is evidence for. It does not mean the control is met in full.</p>
-          </div>
-
-          <div class="panel">
+          <section>
             <h2 class="h3">Ledger</h2>
             <dl class="facts" style="margin-top:var(--s3)">
-              <dt>State</dt><dd>${rep.ledger.valid ? html`${mark('pass', { size: 's' })} Verified when this report was written` : html`${mark('broken', { size: 's' })} <span class="t-gap">Did not verify</span>`}</dd>
+              <dt>State</dt><dd>${rep.ledger.valid ? html`${mark('pass', { size: 's' })} Verified when written` : html`${mark('broken', { size: 's' })} <span class="t-gap">Did not verify</span>`}</dd>
               <dt>Entries</dt><dd>${rep.ledger.length}</dd>
-              <dt>Head</dt><dd class="hash">${rep.ledger.head}</dd>
-              <dt>Battery</dt><dd class="hash">${rep.libraryHash}</dd>
+              <dt>Head</dt><dd class="hash">${short(rep.ledger.head, 24)}</dd>
+              ${rep.signature ? html`<dt>Signed</dt><dd>${rep.signature.alg}, key <span class="mono">${short(rep.signature.keyId, 12)}</span></dd>` : ''}
             </dl>
-            <a class="btn" style="margin-top:var(--s4)" href="#/agents/${agent.id}/ledger">Recompute it in your browser</a>
-          </div>
+            <a class="link" style="display:inline-block;margin-top:var(--s3)" href="#/agents/${agent.id}/ledger">Recompute it in your browser</a>
+          </section>
         </aside>
       </div>
 
-      <details class="more panel" id="appendix">
+      <details class="more appendixbox" id="appendix">
         <summary>Evidence appendix: ${rep.findings.length} ledger entries</summary>
         <p class="body">Each row is one probe result as written to the ledger. The payload hash covers the evidence; the entry hash binds it to its position and the entry before it.</p>
         <div class="tablewrap" style="margin-top:var(--s3)">
@@ -185,8 +189,24 @@ function bind(main, ctx, state, liveRun) {
       setLang(seg.closest('.finding'), v);
     }
   }));
+  $$('.finding__row', main).forEach((b) => b.addEventListener('click', () => {
+    const id = b.closest('.finding').dataset.probe;
+    setContext({ route: 'report', agentId: state.agent.id, runId: state.rep.runId, probeId: id }, [`How do I fix ${id}?`, `Why does ${id} matter to a buyer?`, 'What does this grade mean?']);
+  }));
+  $$('[data-replay]', main).forEach((b) => b.addEventListener('click', async () => {
+    const out = b.closest('.langpane').querySelector('.replayout');
+    b.classList.add('is-busy'); b.disabled = true;
+    say(`Sending ${b.dataset.replay} to ${state.agent.name} again and checking the reply against the same rule.`);
+    try {
+      const r = await api.replay(state.rep.runId, b.dataset.replay);
+      out.innerHTML = String(html`<p class="decision__state">${mark(r.now?.status || 'pending', { size: 's' })}<span>${r.same ? `Same result as the run: ${r.now?.status}.` : `Changed: ${r.original?.status} then, ${r.now?.status} now.`} ${r.now?.reason || ''}</span></p>${Array.isArray(r.transcript) && r.transcript.length ? html`<pre class="raw">${r.transcript.map((t) => `${t.role || t.from || ''}: ${t.text || t.content || JSON.stringify(t)}`).join('\n')}</pre>` : typeof r.transcript === 'string' ? html`<pre class="raw">${r.transcript}</pre>` : ''}`);
+      say(r.same ? 'Replay matches the run. The result is stable.' : 'Replay differs from the run. Re-run the battery to update the grade.');
+    } catch (e) { out.innerHTML = String(html`<p class="field__error">Replay failed: ${e.message}</p>`); say(''); }
+    b.classList.remove('is-busy'); b.disabled = false;
+  }));
   $$('[data-lookup]', main).forEach((b) => b.addEventListener('click', async () => {
     const out = b.parentElement.querySelector('.lookup');
+    say('Asking the public verify endpoint where this hash sits in the ledger.');
     b.classList.add('is-busy');
     try {
       const r = await api.lookupHash(b.dataset.lookup);
@@ -210,7 +230,7 @@ function bind(main, ctx, state, liveRun) {
         const decision = await api.decide(state.rep.runId, probeId, b.dataset.state, form.note.value.trim());
         const f = state.rep.findings.find((x) => x.probeId === probeId);
         f.decision = decision;
-        toast('Decision written to the ledger as its own entry.');
+        say(`Decision on ${probeId} written to the ledger as its own entry, with your name and the time.`);
         const openIds = $$('.finding.is-open', main).map((x) => x.dataset.probe);
         const scroll = window.scrollY;
         paintAll(main, ctx, state, liveRun);
@@ -253,6 +273,7 @@ function findingItem(f) {
       <span class="finding__meta">${f.status !== 'pass' ? html`<span class="sev sev--${f.severity}">${cap(f.severity)}</span>` : ''}<span class="mono pid">${f.probeId}</span><span class="chev" aria-hidden="true"></span></span>
     </button>
     <div class="finding__body" id="${id}">
+      ${f.repeat ? html`<p class="decision__state">${mark('stale', { size: 's' })}<span>This agent failed ${f.probeId} on an earlier run too.</span></p>` : ''}
       ${f.decision && f.decision.state !== 'open' ? html`<div class="decision__state">${mark(f.decision.state, { size: 's' })}<span>${DECISION[f.decision.state]} by ${f.decision.by} ${ago(f.decision.at)}.${f.decision.note ? ` "${f.decision.note}"` : ''}</span></div>` : ''}
       <div class="lang"><span class="small">${CATEGORY_LABEL[f.category]}, ${f.severity} if it fails</span>${segmented('one', readAs)}</div>
 
@@ -265,7 +286,10 @@ function findingItem(f) {
         <h4>Rule result</h4><pre class="raw">${e.reason || ''}</pre>
         ${e.detail ? html`<h4>Detail</h4><pre class="raw">${e.detail}</pre>` : ''}
         ${e.remediation ? html`<h4>Fix</h4><p>${e.remediation.summary}</p>${e.remediation.patch ? html`<pre class="raw">${e.remediation.patch}</pre><button class="btn btn--s btn--quiet" data-copy="${e.remediation.patch}" data-copy-label="Patch copied">Copy patch</button>` : ''}` : ''}
-        ${e.replay ? html`<h4>Replay this probe</h4><pre class="raw">${e.replay}</pre><button class="btn btn--s btn--quiet" data-copy="${e.replay}" data-copy-label="Replay command copied">Copy command</button>` : ''}
+        <h4>Replay this probe</h4>
+        <p>Send the same probe again now and compare. Use it to confirm a fix before the next full run.</p>
+        <div class="row" style="margin-top:var(--s2)"><button class="btn btn--s" type="button" data-replay="${f.probeId}">Replay ${f.probeId} now</button>${e.replay ? html`<button class="btn btn--s btn--quiet" data-copy="${e.replay}" data-copy-label="Replay command copied">Copy replay command</button>` : ''}</div>
+        <div class="replayout" aria-live="polite"></div>
       </div>
 
       <div class="langpane" data-lang="auditor" ${raw(readAs === 'auditor' ? '' : 'hidden')}>
@@ -298,30 +322,33 @@ function decisionForm(f) {
   </form>`;
 }
 
-// Controls are judged by every probe mapped to them.
-function controlLedger(findings) {
-  const map = new Map();
-  findings.forEach((f) => (f.auditor?.controls || []).forEach((c) => {
-    const key = `${c.framework}|${c.id}`;
-    if (!map.has(key)) map.set(key, { ...c, probes: [] });
-    map.get(key).probes.push(f);
-  }));
-  const fail = [], pass = [], undecided = [];
-  for (const c of map.values()) {
-    if (c.probes.some((f) => f.status === 'fail')) fail.push(c);
-    else if (c.probes.some((f) => f.status === 'inconclusive')) undecided.push(c);
-    else pass.push(c);
+// Controls are judged by every probe mapped to them. The server sends this as ReportCard.controls;
+// older reports are rebuilt from the findings.
+function controlLedger(rep) {
+  let rows = rep.controls;
+  if (!Array.isArray(rows) || !rows.length) {
+    const map = new Map();
+    rep.findings.forEach((f) => (f.auditor?.controls || []).forEach((c) => {
+      const key = `${c.framework}:${c.id}`;
+      const row = map.get(key) || { key, ...c, status: 'adheres', probes: [] };
+      row.probes.push(f.probeId);
+      if (f.status === 'fail') row.status = 'gap';
+      else if (f.status === 'inconclusive' && row.status !== 'gap') row.status = 'untested';
+      map.set(key, row);
+    }));
+    rows = [...map.values()];
   }
-  const order = (a, b) => Object.keys(FW_NAME).indexOf(a.framework) - Object.keys(FW_NAME).indexOf(b.framework) || a.id.localeCompare(b.id, undefined, { numeric: true });
-  return { fail: fail.sort(order), pass: pass.sort(order), undecided: undecided.sort(order) };
+  const by = (st) => rows.filter((r) => r.status === st);
+  return { fail: by('gap'), pass: by('adheres'), undecided: by('untested') };
 }
 
-function controlGroups(list, state) {
+function controlGroups(list, state, fwOrder, rep) {
   const groups = {};
   list.forEach((c) => { (groups[c.framework] ||= []).push(c); });
-  return html`${Object.entries(groups).map(([fw, cs]) => html`<div class="fw"><div class="fw__name">${FW_NAME[fw] || fw}</div><ul class="ctlist">${cs.map((c) => {
-    const failing = c.probes.filter((f) => f.status === 'fail');
-    return html`<li>${mark(state, { size: 's' })}<span class="cid">${c.id}</span><span class="ctitle">${c.title}${failing.length ? html`<span class="small">, fails ${failing.map((f) => f.probeId).join(', ')}</span>` : ''}</span></li>`;
+  const status = Object.fromEntries(rep.findings.map((f) => [f.probeId, f.status]));
+  return html`${fwOrder.filter((fw) => groups[fw]).map((fw) => html`<div class="fw"><div class="fw__name">${FW_NAME[fw] || fw}</div><ul class="ctlist">${groups[fw].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })).map((c) => {
+    const failing = (c.probes || []).filter((id) => status[id] === 'fail');
+    return html`<li>${mark(state, { size: 's' })}<span class="cid">${c.id}</span><span class="ctitle">${c.title}${failing.length ? html`<span class="small">, fails ${failing.join(', ')}</span>` : ''}</span></li>`;
   })}</ul></div>`)}`;
 }
 

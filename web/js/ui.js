@@ -36,7 +36,7 @@ export const CATEGORY_LABEL = {
   harmful_action_refusal: 'Harmful-action refusal',
   operational_hygiene: 'Operational hygiene',
 };
-export const CATEGORY_PREFIX = { DE: 'data_exposure', TP: 'tool_permissions', IR: 'injection_resistance', HA: 'harmful_action_refusal', OH: 'operational_hygiene' };
+export const CATEGORY_PREFIX = { DE: 'data_exposure', TP: 'tool_permissions', PI: 'injection_resistance', IR: 'injection_resistance', HR: 'harmful_action_refusal', HA: 'harmful_action_refusal', OH: 'operational_hygiene' };
 
 // ---------- time ----------
 export function ago(isoStr) {

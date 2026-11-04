@@ -1,5 +1,5 @@
 // Integrations: Maritime, Keiki, Supermemory and auth, said plainly.
-import { api, MOCK } from '../api.js';
+import { api, isDemo } from '../api.js';
 import { html, mark, h1, ago, sentence } from '../ui.js';
 
 const ROWS = [
@@ -35,7 +35,7 @@ export async function render(main, ctx) {
           ${mark('ok')}
           <div><div class="int__name">Sign-in</div><div class="small">${ints.auth?.provider === 'clerk' ? 'Clerk' : 'Dev sign-in'}</div></div>
           <div><div class="int__detail">${ints.auth?.provider === 'clerk' ? 'Users sign in with Clerk. The browser sends the session token on every request.' : 'Email sign-in for development. Anyone who can reach the server can sign in.'}</div><div class="int__fix">${ints.auth?.provider === 'clerk' ? 'Managed in the Clerk dashboard.' : 'For production, set CLERK_SECRET_KEY and the Clerk publishable key on the Loxe server.'}</div></div>
-          <div class="small">${MOCK ? 'Sample data' : ''}</div>
+          <div class="small">${isDemo() ? 'Demo data' : ''}</div>
         </li>
       </ul>
     </section>`);

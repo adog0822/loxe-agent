@@ -237,7 +237,7 @@ export function createApp({ db, baseUrl }) {
   });
   api.get('/keys', async (c) =>
     c.json((await db.query(
-      `select id, name, prefix, created_at, last_used_at from api_keys where org_id = $1 and revoked_at is null order by created_at desc`,
+      `select id, name, prefix, created_at as "createdAt", last_used_at as "lastUsedAt" from api_keys where org_id = $1 and revoked_at is null order by created_at desc`,
       [org(c)]
     )).rows)
   );
@@ -410,6 +410,10 @@ export function createApp({ db, baseUrl }) {
 
   // ── Product UI ─────────────────────────────────────────────────────────────
   app.get('/app', (c) => c.redirect('/app/'));
+  app.use('/app/*', async (c, next) => {
+    await next();
+    c.header('Cache-Control', 'no-cache'); // releases replace these files in place
+  });
   app.use('/app/*', serveStatic({ root: './web', rewriteRequestPath: (p) => p.replace(/^\/app/, '') }));
 
   return { app, orchestrator, sentinel };
