@@ -1,40 +1,44 @@
-// Integrations: Maritime, Keiki, Supermemory and auth, said plainly.
+// Integrations: what each one does for the user. Server-side config detail stays in the server log.
 import { api, isDemo } from '../api.js';
-import { html, mark, h1, ago, sentence } from '../ui.js';
+import { html, mark, h1, ago } from '../ui.js';
 
 const ROWS = [
-  ['maritime', 'Maritime', 'Hosts agents. Lets you add one in a click and re-run on every deploy.', 'MARITIME_API_KEY'],
-  ['keiki', 'Keiki', 'Approval-gated alerts. Tells the owner when a grade drops or the ledger breaks.', 'KEIKI_API_KEY'],
-  ['supermemory', 'Supermemory', 'Remembers each run so history survives redeploys.', 'SUPERMEMORY_API_KEY'],
+  ['maritime', 'Maritime', 'Pick an agent you host on Maritime instead of pasting its URL. Loxe checks it again on every deploy.'],
+  ['keiki', 'Keiki', 'Messages you on Slack, iMessage, Telegram or email when a grade drops or the ledger breaks.'],
+  ['supermemory', 'Supermemory', 'Keeps the history of every run, so Loxe can tell you what changed since last time.'],
 ];
+
+const STATE = (s) =>
+  !s.configured ? ['off', 'Not available yet']
+  : s.ok === false ? ['broken', 'Down right now']
+  : s.partial ? ['stale', 'Coming soon']
+  : s.ok === null ? ['stale', 'Not checked yet']
+  : ['ok', 'Connected'];
 
 export async function render(main, ctx) {
   const ints = await api.integrations();
   if (!ctx.alive()) return;
-  const missing = ROWS.filter(([k]) => ints[k] && !ints[k].configured).length;
   main.innerHTML = String(html`
     <section class="page">
       <div>
         <a class="crumb" href="#/">All agents</a>
-        <div style="margin-top:var(--s3)">${h1(missing ? 'Some integrations are not set up.' : 'Every integration is connected.')}</div>
-        <p class="lede">Probing and the ledger work without any of these. Each one adds a convenience, and each is configured on the Loxe server, not here.</p>
+        <div style="margin-top:var(--s3)">${h1('What Loxe connects to.')}</div>
+        <p class="lede">Loxe runs these for you. There is nothing to set up, and testing works without any of them.</p>
       </div>
       <ul class="ints">
-        ${ROWS.map(([k, name, what, env]) => {
-          const s = ints[k] || { configured: false, ok: null, detail: 'The server did not report this integration.' };
-          const st = !s.configured ? 'off' : s.ok === false ? 'broken' : s.ok === null ? 'stale' : 'ok';
-          const word = !s.configured ? 'Not configured' : s.ok === false ? 'Failing' : s.ok === null ? 'Not checked yet' : 'Connected';
+        ${ROWS.map(([k, name, what]) => {
+          const [st, word] = STATE(ints[k] || { configured: false });
           return html`<li class="int">
             ${mark(st)}
             <div><div class="int__name">${name}</div><div class="small">${word}</div></div>
-            <div><div class="int__detail">${sentence(s.detail)}</div><div class="int__fix">${!s.configured ? `Not configured: set ${env} on the Loxe server and restart it.` : s.ok === false ? 'Check the key and that the service is reachable from the Loxe server.' : what}</div></div>
-            <div class="small">${s.checkedAt ? `Checked ${ago(s.checkedAt)}` : ''}</div>
+            <div><div class="int__detail">${what}</div></div>
+            <div class="small">${ints[k]?.checkedAt ? `Checked ${ago(ints[k].checkedAt)}` : ''}</div>
           </li>`;
         })}
         <li class="int">
           ${mark('ok')}
           <div><div class="int__name">Sign-in</div><div class="small">${ints.auth?.provider === 'clerk' ? 'Clerk' : 'Dev sign-in'}</div></div>
-          <div><div class="int__detail">${ints.auth?.provider === 'clerk' ? 'Users sign in with Clerk. The browser sends the session token on every request.' : 'Email sign-in for development. Anyone who can reach the server can sign in.'}</div><div class="int__fix">${ints.auth?.provider === 'clerk' ? 'Managed in the Clerk dashboard.' : 'For production, set CLERK_SECRET_KEY and the Clerk publishable key on the Loxe server.'}</div></div>
+          <div><div class="int__detail">${ints.auth?.provider === 'clerk' ? 'Your account and team. Only people in your team see your private agents.' : 'Development sign-in. Not for real use.'}</div></div>
           <div class="small">${isDemo() ? 'Demo data' : ''}</div>
         </li>
       </ul>

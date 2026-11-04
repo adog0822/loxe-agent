@@ -97,7 +97,7 @@ export async function render(main, ctx) {
   const box = $('#mt-list', main);
   const mt = ints?.maritime;
   if (mt && !mt.configured) {
-    box.innerHTML = String(html`<div class="state"><div class="state__head">${mark('off')}<b>Maritime is not configured.</b></div><p class="body">${sentence(mt.detail || 'Set MARITIME_API_KEY on the Loxe server and restart it')} Pasting a URL works without it.</p></div>`);
+    box.innerHTML = String(html`<div class="state"><div class="state__head">${mark('off')}<b>Maritime is not available yet.</b></div><p class="body">Pasting a URL works without it.</p></div>`);
     return;
   }
   if (list.error) {

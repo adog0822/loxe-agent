@@ -30,7 +30,7 @@ export async function render(main, ctx) {
     </section>`,
     keiki: () => html`<section class="csec" id="c-keiki">
       <div class="csec__head"><h2 class="h2">Text the Keiki agent</h2><p class="body">Message the Loxe agent in Keiki from ${CHANNELS.map((c) => c[1]).join(', ').replace(/, ([^,]*)$/, ' or $1')}. It replies with the grade and a link.</p></div>
-      ${ints?.keiki && !ints.keiki.configured ? html`<p class="body">${mark('off', { size: 's' })} Not configured: ${sentence(ints.keiki.detail || 'set KEIKI_API_KEY on the Loxe server')} The commands below work once it is.</p>` : ''}
+      ${ints?.keiki && !ints.keiki.configured ? html`<p class="body">${mark('off', { size: 's' })} Messaging is not available yet. The commands below work once it is.</p>` : ''}
       ${prefs.alerts && prefs.alerts !== 'none' ? html`<p class="body">You asked for alerts on <b>${alertLabel(prefs.alerts)}</b>, so start there.</p>` : ''}
       <dl class="cmds">
         ${cmd(`clear ${sample?.url || 'https://your-agent.example.com/chat'}`, 'Adds the agent if it is new and runs the full battery.')}
@@ -78,7 +78,7 @@ export async function render(main, ctx) {
   // Maritime list
   const box = $('#mt-list', main);
   if (ints?.maritime && !ints.maritime.configured) {
-    box.innerHTML = String(html`<p class="body">${mark('off', { size: 's' })} Not configured: ${sentence(ints.maritime.detail || 'set MARITIME_API_KEY on the Loxe server')} Pasting a URL works without it.</p>`);
+    box.innerHTML = String(html`<p class="body">${mark('off', { size: 's' })} Maritime is not available yet. Pasting a URL works without it.</p>`);
   } else {
     const list = await api.maritimeAgents().catch((e) => ({ error: e }));
     if (!ctx.alive()) return;

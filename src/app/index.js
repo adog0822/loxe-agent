@@ -473,7 +473,16 @@ export function createApp({ db, baseUrl }) {
     return c.json({ state, by: who.email || who.name, at: ts, note: cleanNote, ledgerSeq: entry.seq, entryHash: entry.entry_hash });
   });
 
-  api.get('/integrations', async (c) => c.json({ ...(await integrationStatus()), auth: { provider: authProvider() } }));
+  // Users see state only. `detail` names server env vars and counts across orgs, so it stays in the server log.
+  api.get('/integrations', async (c) => {
+    const all = await integrationStatus();
+    const out = {};
+    for (const [k, s] of Object.entries(all)) {
+      if (s.configured && (s.ok === false || s.partial)) console.warn(`[integrations] ${k}: ${s.detail}`);
+      out[k] = { configured: s.configured, ok: s.ok, partial: !!s.partial, checkedAt: s.checkedAt };
+    }
+    return c.json({ ...out, auth: { provider: authProvider() } });
+  });
   // The Maritime key is the operator's account, so its agent list is shown only to orgs named in
   // LOXE_MARITIME_ORGS. Other orgs paste their Maritime agent's URL instead.
   const maritimeAllowed = (orgId) => (process.env.LOXE_MARITIME_ORGS || '').split(',').map((x) => x.trim()).includes(orgId);

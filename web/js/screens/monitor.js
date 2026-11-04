@@ -41,8 +41,8 @@ export async function render(main, ctx) {
           <div class="panel">
             <h2 class="h3">Alerts</h2>
             ${!keiki ? html`<p class="body">${mark('stale', { size: 's' })} Alert status did not load.</p>`
-              : !keiki.configured ? html`<p class="body">${mark('off', { size: 's' })} <b>Keiki is not configured.</b> ${sentence(keiki.detail || 'Set KEIKI_API_KEY on the Loxe server')} Sentinel still runs; nobody is told when the grade drops.</p><a class="link" href="#/integrations">See integration setup</a>`
-              : keiki.ok === false ? html`<p class="body">${mark('broken', { size: 's' })} <b>Keiki is failing.</b> ${sentence(keiki.detail)}</p>`
+              : !keiki.configured ? html`<p class="body">${mark('off', { size: 's' })} <b>Alerts are not available yet.</b> Sentinel still re-tests on schedule; the grade shows here.</p>`
+              : keiki.ok === false ? html`<p class="body">${mark('broken', { size: 's' })} <b>Alerts are down right now.</b> Sentinel still re-tests on schedule.</p>`
               : html`<p class="body">${mark('ok', { size: 's' })} Keiki alerts the agent owner${alertPref && alertPref !== 'No alerts' ? ` on ${alertPref}` : ''} when a re-run grades lower than the last one, or when the ledger stops verifying.</p>`}
             ${alertPref ? html`<p class="hint">You asked for alerts on ${alertPref}. <a class="link" href="#/welcome?again=1">Change it</a>.</p>` : ''}
           </div>
@@ -60,7 +60,7 @@ export async function render(main, ctx) {
           </div>
           <div class="panel">
             <h2 class="h3">Remembered history</h2>
-            ${sm && !sm.configured ? html`<p class="body">${mark('off', { size: 's' })} Supermemory is not configured. ${sentence(sm.detail || 'Set SUPERMEMORY_API_KEY on the Loxe server')}</p>`
+            ${sm && !sm.configured ? html`<p class="body">${mark('off', { size: 's' })} Run history across redeploys is not available yet.</p>`
               : memory.error ? html`<p class="body">${mark('stale', { size: 's' })} Supermemory did not answer: ${memory.error.message}</p>`
               : !memory.items?.length ? html`<p class="body">Nothing remembered yet. Each completed run adds a summary here.</p>`
               : html`<ul class="claim">${memory.items.slice(0, 6).map((m) => html`<li><span></span><span><b>${m.title}</b> <span class="small">${ago(m.at)}</span><br>${m.summary}</span></li>`)}</ul>`}

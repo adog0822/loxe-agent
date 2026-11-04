@@ -216,6 +216,6 @@ export function intStrip(ints) {
       const st = !s.configured ? 'off' : s.ok === false ? 'broken' : 'ok';
       return html`<span>${mark(st, { size: 's' })}<b>${n}</b> ${!s.configured ? 'not configured' : s.ok === false ? 'failing' : 'connected'}</span>`;
     })}
-    <a class="link" href="#/integrations" style="margin-left:auto">Integration details</a>
+    <a class="link" href="#/integrations" style="margin-left:auto">Integrations</a>
   </div>`;
 }

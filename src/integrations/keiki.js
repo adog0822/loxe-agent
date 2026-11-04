@@ -60,11 +60,12 @@ export async function status() {
       return { configured: true, ok: false, detail: `${r.status} ${why}`, checkedAt: now() };
     }
     const models = (r.body?.data || []).map((m) => m.id).filter(Boolean);
-    const gateway = models.includes(agentName()) || (agentId() && models.includes(agentId()))
+    const gatewayOn = models.includes(agentName()) || (agentId() && models.includes(agentId()));
+    const gateway = gatewayOn
       ? `API gateway on for "${agentName()}"`
       : `API gateway not on for "${agentName()}" (turn it on in Agents > API gateway)`;
     const notify = agentId() ? 'notices ready' : 'KEIKI_AGENT_ID not set, notices off';
-    return { configured: true, ok: true, detail: `${gateway}; ${notify}`, checkedAt: now() };
+    return { configured: true, ok: true, partial: !gatewayOn || !agentId(), detail: `${gateway}; ${notify}`, checkedAt: now() };
   } catch (err) {
     return { configured: true, ok: false, detail: redact(err.message), checkedAt: now() };
   }
