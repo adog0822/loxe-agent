@@ -110,7 +110,7 @@ export function createApp({ db, baseUrl }) {
     contentSecurityPolicy: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'sha256-erhXR0Mm3t8/aV6S2Q1zaOPNpUY/Xm0G6/qo1ypkzSU='", 'https://cdn.jsdelivr.net', 'https://challenges.cloudflare.com', 'https://cdn.protect.clerk.com', 'https://*.protect.clerk.com', 'https://static.cloudflareinsights.com', clerkHost].filter(Boolean),
-      connectSrc: ["'self'", clerkHost, 'https://*.clerk.accounts.dev', 'https://clerk-telemetry.com', 'https://*.protect.clerk.com', 'https://cloudflareinsights.com'].filter(Boolean),
+      connectSrc: ["'self'", clerkHost, 'https://*.clerk.accounts.dev', 'https://clerk-telemetry.com', 'https://*.protect.clerk.com', 'https://*.protect.clerk.com:*', 'https://cloudflareinsights.com'].filter(Boolean),
       imgSrc: ["'self'", 'data:', 'blob:', 'https://img.clerk.com'],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
