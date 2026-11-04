@@ -1,50 +1,51 @@
-# Deploying Loxe
+# Deploying Loxe (Cloudflare)
 
-## 1. Postgres (Supabase)
+Loxe runs as one Cloudflare Container (this repo's `Dockerfile`) behind a Worker in `cloudflare/`.
+The Worker serves `loxeagent.loxeai.com`, answers the owl guide with Workers AI, and fires the hourly sentinel.
 
-Set `DATABASE_URL` to the Supabase connection string. Migrations run on boot (`migrations/*.sql`,
-tracked in `schema_migrations`). A database that already has the 001 schema is adopted as-is.
-Note: ledger rows written by the pre-fix code fail verification by design (their payload hashes never
-matched). Archive those agents and re-clear them.
+## Prerequisites
 
-## 2. Auth (Clerk)
+- Cloudflare account on the Workers Paid plan, with the `loxeai.com` zone. `wrangler login`.
+- Docker running locally (Colima works: `brew install colima docker docker-buildx && colima start`).
 
-Create a Clerk application, then set `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY`. Turn on Google
-sign-in in the Clerk dashboard if you want it. Clerk Organizations map to Loxe orgs; users without one
-get a personal org. Dev sign-in is disabled whenever `NODE_ENV=production` or Clerk is configured.
+## Secrets
 
-## 3. Signing key
+Set each once (values never go in the repo):
 
 ```bash
-node -e "console.log(require('crypto').generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'}).replace(/\n/g,'\\\\n'))"
+cd cloudflare
+wrangler secret put DATABASE_URL          # Supabase session-pooler URI; without it data resets on restart
+wrangler secret put CLERK_SECRET_KEY
+wrangler secret put CLERK_PUBLISHABLE_KEY
+wrangler secret put LOXE_SIGNING_KEY      # Ed25519 PKCS#8 PEM, \n-escaped; keep it stable
+wrangler secret put LOXE_SCHEDULE_SECRET  # random; authorizes the cron's /sentinel/tick
+wrangler secret put SUPERMEMORY_API_KEY
+wrangler secret put KEIKI_API_KEY
+wrangler secret put MARITIME_API_KEY
 ```
 
-Set the output as `LOXE_SIGNING_KEY`. Keep it stable: it signs every ledger head.
-
-## 4. Maritime
+Generate a signing key:
 
 ```bash
-MARITIME_API_KEY=mk_... DATABASE_URL=... CLERK_SECRET_KEY=... CLERK_PUBLISHABLE_KEY=... \
-SUPERMEMORY_API_KEY=... KEIKI_API_KEY=... LOXE_SIGNING_KEY=... NODE_ENV=production \
-npm run deploy:maritime
+node -e "console.log(require('crypto').generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'}).trim().replace(/\n/g,'\\\\n'))"
 ```
 
-The script creates (or updates) the `loxe` agent from `https://github.com/adog0822/loxe-agent` on port
-3000, stores env as secrets, registers the `agent.deployed` webhook at `/hooks/maritime` (its secret goes
-straight into `MARITIME_WEBHOOK_SECRET`), sets `LOXE_BASE_URL`, and prints the URL. On boot Loxe pushes
-its hourly schedule; the schedule wakes `/chat` with `loxe:sentinel-tick`, which re-clears due agents.
-Push the code to the GitHub repo first; the script restarts the agent but Maritime has no documented
-"rebuild from latest commit" call.
-
-## 5. Keiki
-
-See `keiki-agent/README.md`: create an org API key in Loxe (`POST /api/keys`), then `bun run sync` with
-`KEIKI_API_KEY`, `LOXE_BASE_URL`, `LOXE_API_KEY`. Attach iMessage, Slack, Telegram and email in the Keiki
-dashboard. Put the printed agent id in Loxe's `KEIKI_AGENT_ID`.
-
-## 6. Check
+## Deploy
 
 ```bash
-curl $LOXE_BASE_URL/health
-LOXE_BASE_URL=... LOXE_API_KEY=lx_... node loxe.mjs clear https://your-agent.example.com
+cd cloudflare && npm install && npx wrangler deploy
+curl https://loxeagent.loxeai.com/health
 ```
+
+Migrations run on container boot. Rows written to the ledger by pre-fix versions fail verification by design; re-clear those agents.
+
+## Keiki
+
+See `keiki-agent/README.md`: create an org API key in the app (Connect page), then `bun run sync` with
+`KEIKI_API_KEY`, `LOXE_BASE_URL=https://loxeagent.loxeai.com` and that key. Attach iMessage, Slack, Telegram and
+email in the Keiki dashboard and turn on the API gateway. Put the printed agent id in the `KEIKI_AGENT_ID` secret.
+
+## Maritime
+
+Maritime is an integration, not the host: users pick Maritime agents to clear, and a Maritime `agent.deployed`
+webhook (`/hooks/maritime`, HMAC via `MARITIME_WEBHOOK_SECRET`) re-clears them on deploy.

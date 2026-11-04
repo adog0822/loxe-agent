@@ -7,20 +7,15 @@ and gives you a public clearance page, a badge and a PDF. Every pass/fail verdic
 
 Loxe claims "cleared against these probes on this date, verifiable here". Never "certified" or "compliant".
 
-## Run it locally (no keys needed)
+Live: **https://loxeagent.loxeai.com** (app at `/app/`, what Loxe is at `/app/#/why`).
 
-```bash
-npm install
-npm run demo          # deliberately imperfect demo agent on :4100 (POST / leaky, POST /secure hardened)
-npm start             # Loxe on :3000, embedded Postgres in .data/, dev sign-in
-```
+## Use it
 
-Open http://localhost:3000/app/, sign in with any email, add `http://127.0.0.1:4100/` and run it.
-Expect a D with 15 gaps. `http://127.0.0.1:4100/secure` holds 39 of 40 (the last one is HTTPS).
+1. Sign in at https://loxeagent.loxeai.com/app/ (Clerk; Google sign-in supported).
+2. Paste your agent's URL and press **Test my agent**. The owl walks you through the result.
+3. Share the public page `/a/<agent-id>`, the badge, or the PDF. Turn on monitoring to re-test on a schedule.
 
-```bash
-npm test              # unit + end-to-end (in-memory Postgres, tamper detection, org isolation)
-```
+Toggle **Demo** in the nav for an owl-guided tour on sample data. Press **?** anywhere to ask the owl.
 
 ## Where people use it
 
@@ -30,7 +25,7 @@ npm test              # unit + end-to-end (in-memory Postgres, tamper detection,
 | Public page | `/a/<agent-id>`: grade, ledger head, hash checker, PDF. Badge: `/badge/<agent-id>` |
 | iMessage, Slack, Telegram, email | the Keiki agent in `keiki-agent/` (`clear <url>`, `grade <agent>`, `explain <run> <probe>`), channels attached in the Keiki dashboard |
 | API | `docs/API.md`. Machine callers use an org key: `Authorization: Bearer lx_…` (create in the app or `POST /api/keys`) |
-| CLI | `curl -O https://loxeagent.loxeai.com/cli/loxe.mjs` then `LOXE_API_KEY=lx_… node loxe.mjs clear https://agent.example.com` (one file, no dependencies; source `bin/loxe.js`) |
+| CLI | `curl -O https://loxeagent.loxeai.com/cli/loxe.mjs`, then `LOXE_API_KEY=lx_… node loxe.mjs clear https://agent.example.com` (one file, no dependencies; source `bin/loxe.js`) |
 
 ## How the proof works
 
@@ -54,14 +49,32 @@ Framework mappings live in `src/mapper/controls.json` with official criterion te
 
 | | What Loxe uses it for | Code |
 |---|---|---|
-| Maritime | hosts Loxe; one-click intake of Maritime agents; hourly sentinel schedule; `agent.deployed` webhook re-clears on deploy (HMAC `X-Maritime-Signature`) | `src/integrations/maritime.js`, `scripts/deploy-maritime.js` |
+| Maritime | one-click intake of Maritime agents; hourly sentinel schedule; `agent.deployed` webhook re-clears on deploy (HMAC `X-Maritime-Signature`) | `src/integrations/maritime.js`, `scripts/deploy-maritime.js` |
 | Supermemory | one namespace per org: run history, failed findings, decisions. Flags repeat failures. Context only; the ledger stays in Postgres | `src/integrations/supermemory.js` |
 | Keiki | the messaging front door (iMessage, Slack, Telegram, email, WhatsApp) with approval on `submit_agent`; grade-change notices | `keiki-agent/`, `src/integrations/keiki.js` |
 
-## Configuration
+## Hosting
 
-See `.env.example`. Production needs `DATABASE_URL`, `CLERK_SECRET_KEY` + `CLERK_PUBLISHABLE_KEY`,
-`LOXE_SIGNING_KEY`, `LOXE_BASE_URL`, and the sponsor keys. Deploy: `DEPLOY.md`.
+Cloudflare: a Worker (`cloudflare/`) owns `loxeagent.loxeai.com`, runs the owl guide on Workers AI and an hourly
+sentinel cron, and proxies everything else to one Cloudflare Container running this Node server. See `DEPLOY.md`.
+
+## Security
+
+- No secrets live in this repo. Keys are Cloudflare Worker secrets (`wrangler secret put`) or a local, gitignored
+  `.env.local`. `.env.example` lists the names only. GitHub secret scanning and push protection are on.
+- Agent auth headers are stored server-side and never returned by the API or written to transcripts.
+- Targets are checked against private and metadata IP ranges before every run (SSRF guard).
+- Everything rendered on public pages is HTML-escaped. Every `/api` route is org-scoped.
+- The ledger is append-only in Postgres and every head is signed with Ed25519.
+
+## Develop locally
+
+```bash
+npm install
+npm run demo          # deliberately imperfect demo agent on :4100
+npm start             # Loxe on :3000 with embedded Postgres and dev sign-in (no keys needed)
+npm test              # unit + end-to-end
+```
 
 ## Layout
 
@@ -72,4 +85,5 @@ src/orchestrator background runs + replay         src/mapper     controls table,
 src/reporter    public page, PDF, badge           src/auth       Clerk, dev sign-in, org API keys
 src/sentinel    scheduled re-clearance            src/integrations  Maritime, Supermemory, Keiki
 web/            product UI (static, served at /app)   bin/loxe.js  CLI     keiki-agent/  Keiki agent
+cloudflare/     edge Worker + container config        src/guide    owl guide grounding
 ```
