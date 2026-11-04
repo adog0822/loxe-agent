@@ -674,3 +674,13 @@ body.owl-open .main { margin-right: min(420px, 100vw); }
   .tbl3__row { grid-template-columns: minmax(0, 1fr); gap: var(--s1); }
   .navquiets { display: none; }
 }
+
+/* "What URL do I paste?" explainer (Add agent, first-agent prompt) */
+.endpoint-help { margin-top: var(--s3); }
+.endpoint-help__body { display: grid; gap: var(--s2); padding: var(--s2) 0 var(--s2); max-width: 62ch; }
+.endpoint-help__body > p { margin: 0; }
+.endpoint-help__list { margin-bottom: var(--s2) !important; }
+.endpoint-help__list { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: var(--s2) var(--s4); margin: 0; }
+.endpoint-help__list dt { color: var(--ink-2, inherit); }
+.endpoint-help__list dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .endpoint-help__list { grid-template-columns: 1fr; gap: 0 0; } .endpoint-help__list dd { margin-bottom: var(--s2); } }

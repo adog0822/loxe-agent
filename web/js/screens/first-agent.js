@@ -1,4 +1,5 @@
 // "Test your first agent": one URL field, one click. Used by the welcome flow and the empty hub.
+import { endpointHelp } from '../endpoint-help.js';
 import { api } from '../api.js';
 import { html, raw, $, h1 } from '../ui.js';
 import { say } from '../owl.js';
@@ -20,6 +21,7 @@ export function firstAgentForm(prefs = {}, { compact = false } = {}) {
       </div>
       <p class="field__error" id="fa-err" hidden></p>
       ${note ? html`<p class="hint">${note}</p>` : ''}
+      ${endpointHelp()}
       <p class="hint"><a class="link" href="#/security">What Loxe sends and stores</a>. Use a staging agent: some tests ask it to delete records or send email.</p>
     </form>`;
 }

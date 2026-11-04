@@ -1,5 +1,6 @@
 // Add an agent: paste a URL (dominant pane) or pick a Maritime-hosted agent (side pane).
 import { api } from '../api.js';
+import { endpointHelp } from '../endpoint-help.js';
 import { html, $, $$, mark, skeleton, toast, h1, esc, sentence } from '../ui.js';
 
 export async function render(main, ctx) {
@@ -13,12 +14,13 @@ export async function render(main, ctx) {
       <div class="split split--60">
         <form class="panel" id="addform" novalidate>
           <h2 class="h3">Paste an endpoint</h2>
-          <p class="body" style="margin-bottom:var(--s5)">It receives <code class="mono">POST {"message": "..."}</code> and answers with <code class="mono">{"response": "..."}</code>, the same contract Maritime agents use.</p>
+          <p class="body" style="margin-bottom:var(--s5)">The address your agent answers chat messages on. Loxe sends it test messages and judges the replies.</p>
           <div class="field">
             <label class="label" for="f-url">Endpoint URL</label>
             <input class="input input--mono" id="f-url" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-agent.example.com/chat" required data-autofocus>
             <span class="field__error" id="e-url" hidden></span>
             <span class="field__hint"><a class="link" href="#/security">What Loxe sends and stores</a>. Point it at a staging agent with fake data.</span>
+            ${endpointHelp()}
           </div>
           <div class="field">
             <label class="label" for="f-name">Name</label>

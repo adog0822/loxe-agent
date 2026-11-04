@@ -101,7 +101,8 @@ export function createApp({ db, baseUrl }) {
   const clerkHost = (() => {
     try {
       const pk = process.env.CLERK_PUBLISHABLE_KEY || '';
-      return `https://${Buffer.from(pk.replace(/^pk_(test|live)_/, ''), 'base64').toString().replace(/\$$/, '')}`;
+      const host = pk ? Buffer.from(pk.replace(/^pk_(test|live)_/, ''), 'base64').toString().replace(/\$$/, '') : '';
+      return /^[a-z0-9.-]+$/i.test(host) ? `https://${host}` : '';
     } catch { return ''; }
   })();
   app.use('*', secureHeaders({
