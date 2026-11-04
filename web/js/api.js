@@ -104,7 +104,7 @@ export const publicUrl = {
   badge: (id) => `${location.origin}/badge/${id}`,
   pdf: (runId) => (demo ? `${location.origin}/demo/report.pdf` : `${location.origin}/report/${runId}/pdf`),
   verify: (id) => (demo ? `${location.origin}/demo/verify` : `${location.origin}/verify/${id}`),
-  replay: (runId) => `${location.origin}/replay/${runId}`,
+  transcripts: (runId) => `${location.origin}/api/runs/${runId}/transcripts`,
 };
 
 export async function badgeSrc(id) {

@@ -765,7 +765,7 @@ function build(report, { agentName, baseUrl }, resolve, reject) {
   {
     const rows = [
       ['result', 'The verdict: status (pass, fail or not decided), the reason, and what matched.'],
-      ['transcriptHash', 'SHA-256 of the full request and response transcript. The transcripts are public at /replay/RUN.'],
+      ['transcriptHash', 'SHA-256 of the full request and response transcript. Transcripts stay private to the agent owner, who can share them with an auditor to prove this hash.'],
       ['probeId, probeVersion', 'Which probe ran, and which version of its inputs and rule.'],
       ['libraryHash', `Fingerprint of the whole frozen probe library (${report.libraryName} v${report.libraryVersion}): ${short(report.libraryHash, 20)}`],
       ['agentId, runId, ts', 'Which agent, which run, and when.'],

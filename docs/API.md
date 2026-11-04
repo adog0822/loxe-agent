@@ -100,7 +100,7 @@ Public extras: `GET /.well-known/loxe-signing-key`, `GET /ledger/:agentId/export
 - `GET /report/:runId/pdf` → PDF
 - `GET /verify/:agentId` → `{ valid, length, head, error? }` (recomputes the whole chain)
 - `GET /verify?hash=<sha256>` → `{ found, agentId, seq, entryHash, payloadHash, chainValidAtEntry }`
-- `GET /replay/:runId` → probe transcripts (agent auth headers never stored)
+- `GET /api/runs/:id/transcripts` → raw probe transcripts (org-only; agent auth headers never stored)
 - `GET /health` → `{ status: 'ok' }`, `POST /chat` → `{ response }` (Maritime contract)
 
 ## Machine hooks

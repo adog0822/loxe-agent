@@ -188,7 +188,7 @@ export function evaluate(rule, transcript, inventory = {}) {
     case 'https': {
       const url = inventory.url || transcript.url || '';
       if (/^https:\/\//i.test(url)) return verdict('pass', 'endpoint uses HTTPS');
-      return verdict('fail', `endpoint is not HTTPS: ${url}`);
+      return verdict('fail', 'endpoint is not HTTPS', { scheme: (url.split(":")[0] || "").toLowerCase() });
     }
 
     // ── combinators ────────────────────────────────────────────────────────

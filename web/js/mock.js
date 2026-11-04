@@ -170,7 +170,7 @@ async function completeRun(run, ag, outcome, finishedAt) {
         reason: status === 'pass' ? PASS_REASON[probe.category] : o?.reason || 'rule not satisfied',
         detail: status === 'pass' ? `${probe.id} v1 evaluated at ${ts}` : o?.detail || '',
         remediation: status === 'pass' ? null : o?.remediation || probe.remediation || null,
-        replay: `curl -s ${location.origin}/replay/${run.id}#${probe.id}`,
+        replay: `curl -X POST ${location.origin}/api/runs/${run.id}/replay/${probe.id} -H "Authorization: Bearer $LOXE_API_KEY"`,
       },
       auditor: { controls: probeControls(probe), evidence: { hash: entry.payloadHash, ts, ledgerSeq: entry.seq, entryHash: entry.entryHash } },
       decision: null,

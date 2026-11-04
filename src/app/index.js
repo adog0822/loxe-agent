@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { id } from '../core/canonical.js';
+import { id, sha256 } from '../core/canonical.js';
 import { createAuth, authProvider } from '../auth/index.js';
 import { assertProbeable } from '../collector/guard.js';
 import { Orchestrator } from '../orchestrator/index.js';
@@ -73,15 +73,18 @@ export function createApp({ db, baseUrl }) {
     };
   }
 
-  // Overlay recorded decisions (ledger 'decision' entries) onto a report's findings.
-  async function withDecisions(run) {
+  // Overlay recorded decisions onto a report. Public renderings (the shareable PDF) show the state
+  // and date only; the author and note are visible to the agent's own org.
+  async function withDecisions(run, { publicView = false } = {}) {
     if (!run.report) return run;
     const rows = (await db.query(
-      `select payload from ledger where agent_id = $1 and kind = 'decision' order by seq asc`, [run.agentId]
-    )).rows.map((r) => JSON.parse(r.payload)).filter((d) => d.runId === run.id);
+      `select probe_id, state, note, by_label, created_at from decisions where run_id = $1 order by created_at asc`, [run.id]
+    )).rows;
     for (const d of rows) {
-      const f = run.report.findings.find((x) => x.probeId === d.probeId);
-      if (f) f.decision = { state: d.state, by: d.by, at: d.ts, note: d.note };
+      const f = run.report.findings.find((x) => x.probeId === d.probe_id);
+      if (f) f.decision = publicView
+        ? { state: d.state, by: 'a member of the agent owner\'s team', at: d.created_at, note: null }
+        : { state: d.state, by: d.by_label, at: d.created_at, note: d.note };
     }
     return run;
   }
@@ -188,7 +191,7 @@ export function createApp({ db, baseUrl }) {
     )).rows[0];
     if (!run?.report) return c.text('Run not found or not finished', 404);
     const agent = await agentRow(run.agent_id);
-    const view = await withDecisions(runView(run));
+    const view = await withDecisions(runView(run), { publicView: true });
     const pdf = await generatePDF(view.report, { agentName: agent?.name || run.agent_id, baseUrl });
     return c.body(pdf, 200, {
       'Content-Type': 'application/pdf',
@@ -203,18 +206,6 @@ export function createApp({ db, baseUrl }) {
   });
   app.get('/verify/:agentId', async (c) => c.json({ agentId: c.req.param('agentId'), ...(await ledger.verify(c.req.param('agentId'))) }));
   app.get('/ledger/:agentId/export', async (c) => c.json(await ledger.export(c.req.param('agentId'))));
-
-  app.get('/replay/:runId', async (c) => {
-    const rows = (await db.query(
-      `select probe_id, request_kind, request_body, response_body, status_code, latency_ms, created_at
-       from vendor_requests where run_id = $1 order by created_at asc`,
-      [c.req.param('runId')]
-    )).rows;
-    return c.json({
-      runId: c.req.param('runId'),
-      transcripts: rows.map((r) => ({ ...r, request_body: JSON.parse(r.request_body || 'null'), response_body: JSON.parse(r.response_body || 'null') })),
-    });
-  });
 
   // ── Product API (authenticated) ────────────────────────────────────────────
   const api = new Hono();
@@ -353,6 +344,20 @@ export function createApp({ db, baseUrl }) {
     return r ? c.json(await withDecisions(runView(r))) : c.json({ error: 'not found' }, 404);
   });
 
+  // Raw probe transcripts can contain whatever the agent leaked, so they are org-only.
+  api.get('/runs/:id/transcripts', async (c) => {
+    const r = (await db.query(`select id from runs where id = $1 and org_id = $2`, [c.req.param('id'), org(c)])).rows[0];
+    if (!r) return c.json({ error: 'not found' }, 404);
+    const rows = (await db.query(
+      `select probe_id, request_kind, request_body, response_body, status_code, latency_ms, created_at
+       from vendor_requests where run_id = $1 order by created_at asc`, [r.id]
+    )).rows;
+    return c.json({
+      runId: r.id,
+      transcripts: rows.map((x) => ({ ...x, request_body: JSON.parse(x.request_body || 'null'), response_body: JSON.parse(x.response_body || 'null') })),
+    });
+  });
+
   api.post('/runs/:id/replay/:probeId', async (c) => {
     const r = (await db.query(`select * from runs where id = $1 and org_id = $2`, [c.req.param('id'), org(c)])).rows[0];
     if (!r) return c.json({ error: 'not found' }, 404);
@@ -373,10 +378,19 @@ export function createApp({ db, baseUrl }) {
     const { state, note } = await c.req.json().catch(() => ({}));
     if (!DECISIONS.includes(state)) return c.json({ error: `state must be one of ${DECISIONS.join(', ')}` }, 400);
     const who = c.get('auth').user;
-    const decision = { type: 'decision', agentId: r.agent_id, runId: r.id, probeId, state, note: String(note || '').slice(0, 2000), by: who.email || who.id, ts: new Date().toISOString() };
-    const entry = await ledger.append(r.agent_id, decision, { kind: 'decision', runId: r.id });
-    await integration('supermemory', 'rememberDecision', { orgId: org(c), agentId: r.agent_id, probeId, state, note: decision.note });
-    return c.json({ state, by: decision.by, at: decision.ts, note: decision.note, ledgerSeq: entry.seq, entryHash: entry.entry_hash });
+    const cleanNote = String(note || '').slice(0, 2000);
+    const ts = new Date().toISOString();
+    // Public ledger entry: opaque user id and a hash of the note. Email and note text stay in `decisions`.
+    const entry = await ledger.append(r.agent_id, {
+      type: 'decision', agentId: r.agent_id, runId: r.id, probeId, state, by: who.id, noteHash: sha256(cleanNote), ts,
+    }, { kind: 'decision', runId: r.id });
+    await db.query(
+      `insert into decisions (id, org_id, agent_id, run_id, probe_id, state, note, by_user, by_label, ledger_seq, entry_hash)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [id('dec'), org(c), r.agent_id, r.id, probeId, state, cleanNote, who.id, who.email || who.name || who.id, entry.seq, entry.entry_hash]
+    );
+    await integration('supermemory', 'rememberDecision', { orgId: org(c), agentId: r.agent_id, probeId, state, note: cleanNote });
+    return c.json({ state, by: who.email || who.name, at: ts, note: cleanNote, ledgerSeq: entry.seq, entryHash: entry.entry_hash });
   });
 
   api.get('/integrations', async (c) => c.json({ ...(await integrationStatus()), auth: { provider: authProvider() } }));

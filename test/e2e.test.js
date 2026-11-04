@@ -114,6 +114,20 @@ ok(pdf.status === 200 && pdf.res.headers.get('content-type') === 'application/pd
 
 ok((await call('POST', '/api/agents', { name: 'x', url: 'file:///etc/passwd' })).status === 400, 'non-http targets rejected');
 
+// Privacy: the public surfaces never carry who decided, the note text, or raw transcripts.
+const exported = JSON.stringify((await call('GET', `/ledger/${agent.id}/export`)).body);
+ok(!exported.includes('founder@loxe.ai') && !exported.includes('rotating key'), 'public ledger export has no decision author email or note text');
+ok(exported.includes('noteHash'), 'decision entry binds the note by hash');
+ok((await call('GET', `/replay/${run.id}`, null, { cookie: '' })).status === 404, 'no public transcript route');
+const tr = await app.request(`/api/runs/${run.id}/transcripts`);
+ok(tr.status === 401, 'transcripts need sign-in');
+ok((await call('GET', `/api/runs/${run.id}/transcripts`)).body.transcripts.length > 0, 'owner can read transcripts');
+ok((await other('GET', `/api/runs/${run.id}/transcripts`)).status === 404, 'another org cannot read transcripts');
+const ownerView = (await call('GET', `/api/runs/${run.id}`)).body.report.findings.find((x) => x.probeId === fail.probeId).decision;
+ok(ownerView.by === 'founder@loxe.ai' && ownerView.note === 'rotating key', 'owner still sees author and note');
+const clearanceJson = JSON.stringify((await call('GET', `/clearance/${agent.id}`)).body);
+ok(!clearanceJson.includes('founder@loxe.ai') && !clearanceJson.includes(targetUrl), 'public clearance JSON has no author email or target URL');
+
 const led = (await call('GET', `/api/agents/${agent.id}/ledger`)).body;
 ok(verifyRows(agent.id, led.entries.map((e) => ({ seq: e.seq, prev_hash: e.prevHash, payload_hash: e.payloadHash, entry_hash: e.entryHash, payload: e.payload }))).valid, 'UI ledger listing recomputes');
 const ui = await app.request('/app/');
