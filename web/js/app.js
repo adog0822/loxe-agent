@@ -3,6 +3,7 @@ import { api, MOCK, setTokenProvider, setUnauthorizedHandler } from './api.js';
 import { html, raw, $, esc, toast } from './ui.js';
 
 const CLERK_VERSION = '6.39.0';
+const CLERK_UI_VERSION = '1.42.3'; // clerk-js v6 ships its sign-in UI as a separate bundle
 
 export const session = { provider: 'dev', user: null, org: null, clerk: null };
 
@@ -167,8 +168,9 @@ async function bootAuth() {
   if (session.provider === 'clerk') {
     if (!cfg.auth.publishableKey) throw new Error('The server says auth is Clerk but sent no publishable key. Add the Clerk publishable key to the Loxe server config.');
     await loadScript(`https://cdn.jsdelivr.net/npm/@clerk/clerk-js@${CLERK_VERSION}/dist/clerk.browser.js`, { 'data-clerk-publishable-key': cfg.auth.publishableKey });
+    await loadScript(`https://cdn.jsdelivr.net/npm/@clerk/ui@${CLERK_UI_VERSION}/dist/ui.browser.js`);
     const clerk = window.Clerk;
-    await clerk.load();
+    await clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
     session.clerk = clerk;
     setTokenProvider(async () => (clerk.session ? clerk.session.getToken() : null));
     clerk.addListener?.(({ user }) => {

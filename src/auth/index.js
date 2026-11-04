@@ -65,8 +65,10 @@ export function createAuth(db) {
     const u = await clerk.users.getUser(claims.sub);
     const email = u.primaryEmailAddress?.emailAddress || u.emailAddresses?.[0]?.emailAddress || claims.sub;
     const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || email;
-    const orgId = claims.org_id ? `clerk:${claims.org_id}` : `personal:${claims.sub}`;
-    const orgName = claims.org_slug || `${name}'s org`;
+    // Session token v2 nests the active org under `o` ({ id, slg, rol }); v1 used org_id/org_slug.
+    const clerkOrg = claims.o?.id || claims.org_id;
+    const orgId = clerkOrg ? `clerk:${clerkOrg}` : `personal:${claims.sub}`;
+    const orgName = claims.o?.slg || claims.org_slug || `${name}'s org`;
     return { ...(await ensureUser({ userId: claims.sub, email, name, orgId, orgName })), via: 'clerk' };
   }
 
