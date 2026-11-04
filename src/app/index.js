@@ -22,6 +22,7 @@ import { clearancePage } from '../reporter/page.js';
 import { createSentinel } from '../sentinel/index.js';
 import { integration, integrationStatus } from '../integrations/index.js';
 import { createDemo } from '../demo/index.js';
+import * as slack from '../integrations/slack.js';
 import { sealJson } from '../db/crypto.js';
 import { demoFetch } from '../../demo/target-agent.js';
 import { buildOwlMessages, askViaRest, OWL_MODEL } from '../guide/index.js';
@@ -372,7 +373,9 @@ export function createApp({ db, baseUrl }) {
       `select id from runs where org_id = $1 and status in ('queued', 'running') order by started_at desc`, [org(c)]
     )).rows;
     if (active.length >= 3) return c.json({ error: 'three runs are already going for this organization; wait for one to finish', runId: active[0].id }, 429);
-    const { runId, status } = await orchestrator.enqueue(a, { trigger: 'manual' });
+    // The CLI marks runs started from GitHub Actions so the Integrations page can show the last CI check.
+    const trigger = c.req.header('x-loxe-trigger') === 'ci:github' ? 'ci:github' : 'manual';
+    const { runId, status } = await orchestrator.enqueue(a, { trigger });
     return c.json({ runId, status }, 202);
   });
 
@@ -472,6 +475,33 @@ export function createApp({ db, baseUrl }) {
     await integration('supermemory', 'rememberDecision', { orgId: org(c), agentId: r.agent_id, probeId, state });
     return c.json({ state, by: who.email || who.name, at: ts, note: cleanNote, ledgerSeq: entry.seq, entryHash: entry.entry_hash });
   });
+
+  // Integrations a team connects itself.
+  api.get('/org/integrations', async (c) => {
+    const lastCi = (await db.query(
+      `select r.id, r.agent_id, r.status, r.grade, r.finished_at, a.name from runs r join agents a on a.id = r.agent_id
+        where r.org_id = $1 and r.trigger = 'ci:github' order by r.started_at desc limit 1`, [org(c)]
+    )).rows[0];
+    return c.json({
+      slack: await slack.status(db, org(c)),
+      github: { lastRun: lastCi ? { runId: lastCi.id, agentId: lastCi.agent_id, agentName: lastCi.name, status: lastCi.status, grade: lastCi.grade, at: lastCi.finished_at } : null },
+    });
+  });
+  const slackErr = (c, e) => c.json({ error: e.message }, e.status || 500);
+  api.put('/org/integrations/slack', async (c) => {
+    const b = await c.req.json().catch(() => ({}));
+    try { return c.json(await slack.connect(db, org(c), { url: b.url, mode: b.mode })); } catch (e) { return slackErr(c, e); }
+  });
+  api.patch('/org/integrations/slack', async (c) => {
+    const b = await c.req.json().catch(() => ({}));
+    try { return c.json(await slack.setMode(db, org(c), b.mode)); } catch (e) { return slackErr(c, e); }
+  });
+  api.post('/org/integrations/slack/test', async (c) => {
+    const r = await slack.send(db, org(c), { type: 'test' });
+    if (!r) return c.json({ error: 'Slack is not connected' }, 404);
+    return r.ok ? c.json({ ok: true }) : c.json({ error: `Slack refused it (${r.status || 'no answer'})` }, 502);
+  });
+  api.delete('/org/integrations/slack', async (c) => { await slack.disconnect(db, org(c)); return c.body(null, 204); });
 
   // Users see state only. `detail` names server env vars and counts across orgs, so it stays in the server log.
   api.get('/integrations', async (c) => {

@@ -85,7 +85,11 @@ Public extras: `GET /.well-known/loxe-signing-key`, `GET /ledger/:agentId/export
 
 - `GET /api/integrations` →
   `{ maritime: Status, keiki: Status, supermemory: Status, auth: { provider } }`
-  where `Status = { configured: boolean, ok: boolean|null, detail: string, checkedAt }`
+  where `Status = { configured: boolean, ok: boolean|null, partial: boolean, checkedAt }` (server config detail goes to the server log only)
+- `GET /api/org/integrations` → `{ slack: { connected, mode, hint, lastStatus, lastAt }, github: { lastRun: { runId, agentId, agentName, status, grade, at } | null } }`
+- `PUT /api/org/integrations/slack` `{ url, mode: 'changes'|'every' }` → sends a test message, stores the URL encrypted; 400 if it is not `https://hooks.slack.com/services/...` or Slack refuses
+- `PATCH /api/org/integrations/slack` `{ mode }`, `POST /api/org/integrations/slack/test`, `DELETE /api/org/integrations/slack`
+- `POST /api/agents/:id/runs` with header `x-loxe-trigger: ci:github` marks the run as a GitHub check (the CLI sets it inside GitHub Actions)
 - `GET /api/maritime/agents` → `[{ id, name, status, url }]` (one-click intake)
 - `GET /api/memory/:agentId` → `{ items: [{ title, summary, at }] }` (Supermemory history)
 

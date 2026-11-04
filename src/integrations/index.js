@@ -5,7 +5,9 @@ const modules = {
   maritime: () => import('./maritime.js'),
   keiki: () => import('./keiki.js'),
   supermemory: () => import('./supermemory.js'),
+  slack: () => import('./slack.js'),
 };
+const SERVER_WIDE = ['maritime', 'keiki', 'supermemory'];
 
 export async function integration(name, fn, ...args) {
   try {
@@ -20,7 +22,7 @@ export async function integration(name, fn, ...args) {
 
 export async function integrationStatus() {
   const out = {};
-  for (const name of Object.keys(modules)) {
+  for (const name of SERVER_WIDE) {
     out[name] = (await integration(name, 'status')) || {
       configured: false, ok: null, detail: `${name} module unavailable`, checkedAt: new Date().toISOString(),
     };

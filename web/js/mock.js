@@ -468,6 +468,15 @@ export async function handle(method, path, body) {
     a.chain = { valid: a.chain.valid, length: e.seq + 1, head: e.entryHash };
     return json(200, f.decision);
   }
+  if (p === '/api/org/integrations' && method === 'GET') return json(200, { slack: db.slack || { connected: false }, github: { lastRun: null } });
+  if (p === '/api/org/integrations/slack' && method === 'PUT') {
+    if (!/^https:\/\/hooks\.slack\.com\/services\//.test(body?.url || '')) return json(400, { error: 'That is not a Slack webhook. It should start with https://hooks.slack.com/services/' });
+    db.slack = { connected: true, mode: body.mode || 'changes', hint: body.url.slice(-4), lastStatus: 'delivered', lastAt: iso(Date.now()) };
+    return json(200, db.slack);
+  }
+  if (p === '/api/org/integrations/slack' && method === 'PATCH') { if (!db.slack) return json(404, { error: 'Slack is not connected' }); db.slack.mode = body.mode; return json(200, db.slack); }
+  if (p === '/api/org/integrations/slack/test' && method === 'POST') { if (!db.slack) return json(404, { error: 'Slack is not connected' }); db.slack.lastAt = iso(Date.now()); return json(200, { ok: true }); }
+  if (p === '/api/org/integrations/slack' && method === 'DELETE') { db.slack = null; return json(204, null); }
   if (p === '/api/integrations') return json(200, integrations());
   if (p === '/api/maritime/agents') return json(200, [
     { id: 'mt-7781', name: 'refund-agent', status: 'running', url: 'https://refund-agent.maritime.run/chat' },

@@ -1,0 +1,38 @@
+name: Loxe clearance
+description: Test an AI agent with Loxe's 40 probes and fail the job when its grade is worse than a minimum.
+branding:
+  icon: shield
+  color: green
+inputs:
+  api-key:
+    description: A Loxe org API key (lx_...). Store it as a repository secret.
+    required: true
+  agent-id:
+    description: The Loxe agent id to test (shown on the agent's page and on Integrations).
+    required: true
+  min-grade:
+    description: Fail when the grade is worse than this letter (A to F).
+    default: B
+  base-url:
+    description: The Loxe server.
+    default: https://loxeagent.loxeai.com
+outputs:
+  grade:
+    description: The grade this run got.
+    value: ${{ steps.run.outputs.grade }}
+runs:
+  using: composite
+  steps:
+    - name: Run Loxe
+      id: run
+      shell: bash
+      env:
+        LOXE_API_KEY: ${{ inputs.api-key }}
+        LOXE_BASE_URL: ${{ inputs.base-url }}
+        AGENT_ID: ${{ inputs.agent-id }}
+        MIN_GRADE: ${{ inputs.min-grade }}
+      run: |
+        node "$GITHUB_ACTION_PATH/bin/loxe.js" run "$AGENT_ID" --min-grade "$MIN_GRADE" | tee "$RUNNER_TEMP/loxe.txt"
+        code=${PIPESTATUS[0]}
+        echo "grade=$(grep -oE '^Grade [A-F]' "$RUNNER_TEMP/loxe.txt" | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+        exit $code

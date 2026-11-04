@@ -160,6 +160,31 @@ ok(ui.status === 200 && (await ui.text()).includes('<html'), 'product UI served 
 const js = await app.request('/app/js/app.js');
 ok(js.status === 200 && (js.headers.get('content-type') || '').includes('javascript'), 'UI modules served as JavaScript');
 
+// Integrations: users see state only; Slack webhook is validated, sealed, and gets alerts.
+const intsView = JSON.stringify((await call('GET', '/api/integrations')).body);
+ok(!intsView.includes('detail') && !intsView.includes('_KEY'), 'integration status hides server config');
+ok((await call('PUT', '/api/org/integrations/slack', { url: 'http://127.0.0.1/services/a/b/c' })).status === 400, 'non-Slack webhook refused');
+const hook = 'https://hooks.slack.com/services/T000/B000/abcdEFGH1234';
+const posted = [];
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (u, init) => {
+  if (String(u).startsWith('https://hooks.slack.com/')) { posted.push(JSON.parse(init.body).text); return new Response('ok', { status: 200 }); }
+  return realFetch(u, init);
+};
+const sl = await call('PUT', '/api/org/integrations/slack', { url: hook, mode: 'every' });
+ok(sl.status === 200 && sl.body.connected && sl.body.hint === '1234' && posted.length === 1, 'Slack connects after a test message');
+const sealedHook = (await db.query(`select config from org_integrations where kind = 'slack'`)).rows[0].config;
+ok(sealedHook.startsWith('enc:v1:') && !sealedHook.includes('abcdEFGH'), 'Slack webhook encrypted at rest');
+ok(!JSON.stringify((await call('GET', '/api/org/integrations')).body).includes('abcdEFGH'), 'Slack webhook never returned');
+ok((await other('GET', '/api/org/integrations')).body.slack.connected === false, 'another org does not see this Slack');
+const ciRun = (await call('POST', `/api/agents/${agent.id}/runs`, null, { 'x-loxe-trigger': 'ci:github' })).body;
+await orchestrator.perAgent.get(agent.id);
+ok(posted.length === 2 && posted[1].includes('grade'), 'finished run posts to Slack');
+const gh = (await call('GET', '/api/org/integrations')).body.github.lastRun;
+ok(gh?.runId === ciRun.runId && gh.grade, 'GitHub check run shows as the last CI run');
+ok((await call('DELETE', '/api/org/integrations/slack')).status === 204 && !(await call('GET', '/api/org/integrations')).body.slack.connected, 'Slack disconnects');
+globalThis.fetch = realFetch;
+
 target.close();
 await db.close();
 const shdr = (await app.request('/app/')).headers;

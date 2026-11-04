@@ -94,15 +94,19 @@ export class Orchestrator {
       );
 
       await integration('supermemory', 'rememberRun', { orgId: agent.org_id, agentId: agent.id, agentName: agent.name, report });
+      const ev = { agentName: agent.name, oldGrade, newGrade: report.grade, failed: report.failed, url: `${this.baseUrl}/app/#/agents/${agent.id}/report` };
       if (oldGrade && oldGrade !== report.grade) {
         await integration('keiki', 'notify', {
           orgId: agent.org_id, type: 'grade_change', agentName: agent.name, oldGrade, newGrade: report.grade,
           url: `${this.baseUrl}/a/${agent.id}`,
         });
       }
+      const type = !report.ledger?.valid ? 'ledger_broken' : oldGrade && oldGrade !== report.grade ? 'grade_change' : 'run_completed';
+      await integration('slack', 'send', this.db, agent.org_id, { ...ev, type });
       return report;
     } catch (err) {
       await this.db.query(`update runs set status = 'failed', error = $1, finished_at = now() where id = $2`, [err.message, runId]);
+      await integration('slack', 'send', this.db, agent.org_id, { type: 'run_failed', agentName: agent.name, error: String(err.message).slice(0, 120) });
       throw err;
     }
   }

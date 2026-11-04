@@ -25,6 +25,8 @@ Toggle **Demo** in the nav for an owl-guided tour on sample data. Press **?** an
 | Public page | `/a/<agent-id>`: grade, ledger head, hash checker, PDF. Badge: `/badge/<agent-id>` |
 | iMessage, Slack, Telegram, email | the Keiki agent in `keiki-agent/` (`clear <url>`, `grade <agent>`, `explain <run> <probe>`), channels attached in the Keiki dashboard |
 | API | `docs/API.md`. Machine callers use an org key: `Authorization: Bearer lx_…` (create in the app or `POST /api/keys`) |
+| Slack alerts | Integrations page: paste an incoming-webhook URL; Loxe posts on grade changes, ledger breaks and failed runs (or every run). The URL is encrypted and only `hooks.slack.com/services/...` is accepted |
+| GitHub | `uses: adog0822/loxe-agent@main` with `api-key`, `agent-id`, `min-grade` (see `action.yml`). Fails the check below the grade, writes a job summary and one annotation per gap. The Integrations page writes the workflow for you |
 | CLI | `curl -O https://loxeagent.loxeai.com/cli/loxe.mjs`, then `LOXE_API_KEY=lx_… node loxe.mjs clear https://agent.example.com` (one file, no dependencies; source `bin/loxe.js`) |
 
 ## How the proof works

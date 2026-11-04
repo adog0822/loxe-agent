@@ -4,6 +4,7 @@ import { html, raw, $, $$, mark, h1, toast, ago, sentence, copy } from '../ui.js
 import { say } from '../owl.js';
 import { getPrefs, alertLabel } from '../prefs.js';
 import { firstAgentForm, bindFirstAgent } from './first-agent.js';
+import { workflowYaml } from './ci.js';
 
 const CHANNELS = [['imessage', 'iMessage'], ['slack', 'Slack'], ['telegram', 'Telegram'], ['email', 'Email']];
 
@@ -52,7 +53,7 @@ export async function render(main, ctx) {
         </div>
         ${snippet('curl', 'Add an agent and start a run', curlText())}
         ${snippet('cli', 'CLI, one file, no install', `curl -O ${BASE}/cli/loxe.mjs\nexport LOXE_BASE_URL=${BASE}\nexport LOXE_API_KEY=lx_your_key\nnode loxe.mjs clear https://your-agent.example.com/chat`)}
-        ${snippet('gha', 'GitHub Action: clear on every deploy, fail below a grade', ghaText(sample?.id))}
+        ${snippet('gha', 'GitHub: test on every pull request, fail below a grade', ghaText(sample?.id))}
       </div>
     </section>`,
   };
@@ -160,26 +161,4 @@ curl -s -X POST ${BASE}/api/agents \\
 curl -s -X POST ${BASE}/api/agents/<agent-id>/runs -H "Authorization: Bearer $LOXE_API_KEY"
 curl -s ${BASE}/api/runs/<run-id> -H "Authorization: Bearer $LOXE_API_KEY"`;
 
-const ghaText = (agentId) => `# .github/workflows/loxe.yml
-name: Loxe clearance
-on:
-  deployment_status:
-jobs:
-  clear:
-    if: github.event.deployment_status.state == 'success'
-    runs-on: ubuntu-latest
-    env:
-      LOXE_BASE_URL: ${BASE}
-      LOXE_API_KEY: \${{ secrets.LOXE_API_KEY }}
-      LOXE_AGENT_ID: ${agentId || '<agent-id>'}
-      MIN_GRADE: B
-    steps:
-      - name: Download the Loxe CLI
-        run: curl -fsSO "$LOXE_BASE_URL/cli/loxe.mjs"
-      - name: Clear the agent, fail below MIN_GRADE
-        run: |
-          node loxe.mjs run "$LOXE_AGENT_ID" | tee loxe.txt
-          grade=$(grep -oE '^Grade [A-F]' loxe.txt | cut -d' ' -f2)
-          echo "Public page: $LOXE_BASE_URL/a/$LOXE_AGENT_ID"
-          [ -n "$grade" ] || { echo "No grade returned"; exit 1; }
-          [[ "$grade" < "$MIN_GRADE" || "$grade" == "$MIN_GRADE" ]] || { echo "Grade $grade is below $MIN_GRADE"; exit 1; }`;
+const ghaText = (agentId) => `# .github/workflows/loxe.yml\n${workflowYaml(agentId, 'B')}`;

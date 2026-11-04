@@ -2,6 +2,7 @@
 // LOXE CLI — the developer surface over the same API the web app uses.
 //   LOXE_BASE_URL=https://… LOXE_API_KEY=lx_… loxe <command>
 //   loxe clear <url> [--name n]      register an endpoint and run a clearance, wait for the grade
+//   loxe run <agent-id> [--min-grade B]  re-run; exit 3 if the grade is worse than B (for CI)
 //   loxe run <agent-id>              re-run an existing agent
 //   loxe agents                      list agents and grades
 //   loxe report <run-id> [--json]    print the report card (findings by severity)
@@ -42,7 +43,11 @@ const opt = (f) => (args.indexOf(f) >= 0 ? args[args.indexOf(f) + 1] : undefined
 async function api(method, path, body) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'content-type': 'application/json', ...(KEY ? { authorization: `Bearer ${KEY}` } : {}) },
+    headers: {
+      'content-type': 'application/json',
+      ...(KEY ? { authorization: `Bearer ${KEY}` } : {}),
+      ...(process.env.GITHUB_ACTIONS === 'true' ? { 'x-loxe-trigger': 'ci:github' } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = (res.headers.get('content-type') || '').includes('json') ? await res.json() : await res.text();
@@ -77,6 +82,32 @@ async function waitFor(runId) {
   }
 }
 
+// --min-grade B: exit 3 when the grade is worse than B. In GitHub Actions, also write the job
+// summary and one error annotation per open gap.
+async function gate(r) {
+  const min = (opt('--min-grade') || process.env.LOXE_MIN_GRADE || '').toUpperCase();
+  if (min && !/^[A-F]$/.test(min)) throw new Error('--min-grade must be a letter A to F');
+  const below = min && r.grade > min;
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const gaps = r.findings.filter((f) => f.status === 'fail').sort((a, b) => SEV[b.severity] - SEV[a.severity]);
+    for (const f of gaps.slice(0, 10)) console.log(`::${SEV[f.severity] >= 3 ? 'error' : 'warning'} title=Loxe ${f.probeId} (${f.severity})::${f.title}. ${f.plainEnglish}`.replace(/\r?\n/g, ' '));
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      const { appendFileSync } = await import('node:fs');
+      const rows = gaps.map((f) => `| ${f.severity} | ${f.probeId} | ${f.title} | ${f.engineer.remediation?.summary || ''} |`).join('\n');
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+        `## Loxe: grade ${r.grade}${min ? (below ? ` (below the minimum ${min})` : ` (meets the minimum ${min})`) : ''}`,
+        `${r.passed} held, ${r.failed} gaps, ${r.inconclusive} untested. Ledger ${r.ledger.valid ? 'verifies' : 'does NOT verify'}.`,
+        gaps.length ? `\n| Severity | Probe | Gap | Fix |\n|---|---|---|---|\n${rows}` : '',
+        `\n[Public page](${BASE}/a/${r.agentId}), [PDF](${BASE}/report/${r.runId}/pdf)\n`,
+      ].join('\n'));
+    }
+  }
+  if (below) {
+    console.error(`Grade ${r.grade} is below the minimum ${min}.`);
+    process.exitCode = 3;
+  }
+}
+
 const commands = {
   async clear() {
     const url = args.find((a) => /^https?:\/\//.test(a));
@@ -84,11 +115,15 @@ const commands = {
     const agent = await api('POST', '/api/agents', { name: opt('--name') || new URL(url).host, url });
     console.log(`Registered ${agent.name} as ${agent.id}`);
     const { runId } = await api('POST', `/api/agents/${agent.id}/runs`);
-    printReport((await waitFor(runId)).report);
+    const { report } = await waitFor(runId);
+    printReport(report);
+    await gate(report);
   },
   async run() {
     const { runId } = await api('POST', `/api/agents/${args[0]}/runs`);
-    printReport((await waitFor(runId)).report);
+    const { report } = await waitFor(runId);
+    printReport(report);
+    await gate(report);
   },
   async agents() {
     for (const a of await api('GET', '/api/agents'))
@@ -122,7 +157,7 @@ const commands = {
 };
 
 if (!commands[cmd]) {
-  console.log('loxe clear <url> | run <agent> | agents | report <run> | verify <agent> [--offline] | hash <sha256> | replay <run> <probe> | monitor <agent> <hours|off>');
+  console.log('loxe clear <url> | run <agent> [--min-grade B] | agents | report <run> | verify <agent> [--offline] | hash <sha256> | replay <run> <probe> | monitor <agent> <hours|off>');
   process.exit(cmd ? 1 : 0);
 }
 commands[cmd]().catch((e) => {
