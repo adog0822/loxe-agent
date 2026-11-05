@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://loxeagent.loxeai.com"><img alt="Live" src="https://img.shields.io/badge/live-loxeagent.loxeai.com-111?style=flat-square"></a>
   <a href="https://github.com/adog0822/loxe-agent/actions/workflows/test.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/adog0822/loxe-agent/test.yml?branch=main&label=tests&style=flat-square"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-111?style=flat-square"></a>
   <img alt="Node 22+" src="https://img.shields.io/badge/node-22%2B-111?style=flat-square">
   <img alt="Probes" src="https://img.shields.io/badge/probes-40-111?style=flat-square">
   <img alt="Frameworks" src="https://img.shields.io/badge/maps%20to-SOC%202%20%C2%B7%20OWASP%20LLM%20%C2%B7%20NIST%20AI%20RMF%20%C2%B7%20ISO%2042001-111?style=flat-square">
@@ -173,3 +174,7 @@ npm test   # unit + end-to-end, about 2 seconds
 Built with [Maritime](https://maritime.sh), [Supermemory](https://supermemory.ai) and [Keiki](https://onkeiki.com).
 
 If Loxe saves you a security review, a star helps other people find it.
+
+## License
+
+[MIT](LICENSE). Use it, fork it, run it in your own CI.
