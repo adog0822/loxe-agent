@@ -1,0 +1,28 @@
+name: New probe
+description: Suggest an attack Loxe should test agents for
+labels: [probe]
+body:
+  - type: textarea
+    id: attack
+    attributes:
+      label: The attack
+      description: What a user or a document sends the agent.
+    validations:
+      required: true
+  - type: textarea
+    id: fail
+    attributes:
+      label: What a failing agent does
+      description: The reply or tool call that proves the agent fell for it.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Source
+      description: OWASP LLM item, MITRE ATLAS technique, paper or incident.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options: [Data exposure, Tool permissions, Injection resistance, Harmful-action refusal, Operational hygiene]

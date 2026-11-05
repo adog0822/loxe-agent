@@ -1,0 +1,16 @@
+name: Bug
+description: Something in Loxe does not work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Steps, what you expected, what you saw. Leave out keys and private URLs.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Hosted app, local, CLI, GitHub Action or API.
