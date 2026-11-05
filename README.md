@@ -15,7 +15,6 @@
   <img alt="Node 22+" src="https://img.shields.io/badge/node-22%2B-111?style=flat-square">
   <img alt="Probes" src="https://img.shields.io/badge/probes-40-111?style=flat-square">
   <img alt="Frameworks" src="https://img.shields.io/badge/maps%20to-SOC%202%20%C2%B7%20OWASP%20LLM%20%C2%B7%20NIST%20AI%20RMF%20%C2%B7%20ISO%2042001-111?style=flat-square">
-  <a href="https://github.com/adog0822/loxe-agent/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/adog0822/loxe-agent?style=flat-square"></a>
 </p>
 
 <p align="center">
