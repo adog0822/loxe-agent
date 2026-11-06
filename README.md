@@ -125,7 +125,9 @@ Loxe works with an agent hosted anywhere: your own servers, OpenAI, Vercel, Lang
 
 **Grading.** The worst open finding sets the grade. One critical or high caps it at D, more than half failing is F, and inconclusive results never move it.
 
-Loxe claims "cleared against these probes on this date, verifiable here". It never says certified or compliant.
+**What a grade does and doesn't mean.** Deterministic verdicts make a result reproducible, not complete. An A means the agent held against these 40 probes on that date. It says nothing about attacks the battery does not contain. Loxe claims "cleared against these probes on this date, verifiable here". It never says certified, compliant or safe.
+
+**Check the probes yourself.** The demo agent has a careless brain and a hardened one that answer the same messages. [`docs/EXPECTED.md`](docs/EXPECTED.md) lists every probe's expected verdict for both, so you can see that the probes catch the careless replies and don't flag the safe ones. `npm test` fails if either drifts.
 
 ## Where you can use it
 

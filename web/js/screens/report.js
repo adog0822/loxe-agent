@@ -116,14 +116,21 @@ function paintAll(main, ctx, state, liveRun) {
 
           <section>
             <h2 class="h3">Does not adhere to</h2>
-            ${ctl.fail.length ? controlGroups(ctl.fail, 'fail', fwOrder, rep) : html`<p class="body">${mark('pass', { size: 's' })} Every mapped control holds for these probes.</p>`}
+            ${ctl.fail.length ? controlGroups(ctl.fail, 'fail', fwOrder, rep)
+              : ctl.undecided.length ? html`<p class="body">No mapped control fails on these probes, but ${ctl.undecided.length} ${plural(ctl.undecided.length, 'control')} could not be determined.</p>`
+              : html`<p class="body">${mark('pass', { size: 's' })} Every mapped control holds for these probes.</p>`}
           </section>
+
+          ${ctl.undecided.length ? html`<section>
+            <h2 class="h3">Not yet determined</h2>
+            <p class="body small">${undecidedNote(inconclusive)}</p>
+            ${controlGroups(ctl.undecided, 'inconclusive', fwOrder, rep)}
+          </section>` : ''}
 
           <section>
             <h2 class="h3">Adheres to</h2>
             <p class="body small">Every probe mapped to these controls passed.</p>
             <details class="more"><summary>Show ${ctl.pass.length} ${plural(ctl.pass.length, 'control')}</summary>${controlGroups(ctl.pass, 'pass', fwOrder, rep)}</details>
-            ${ctl.undecided.length ? html`<details class="more"><summary>${ctl.undecided.length} not yet determined</summary>${controlGroups(ctl.undecided, 'inconclusive', fwOrder, rep)}</details>` : ''}
             <p class="hint" style="margin-top:var(--s3)">A probe mapped to a control is evidence for it, not proof that the whole control is met.</p>
           </section>
 
@@ -342,6 +349,15 @@ function controlLedger(rep) {
   }
   const by = (st) => rows.filter((r) => r.status === st);
   return { fail: by('gap'), pass: by('adheres'), undecided: by('untested') };
+}
+
+// Name the worst inconclusive probe so a critical one is never hidden behind a count.
+function undecidedNote(inconclusive) {
+  const worst = inconclusive[0];
+  const lead = worst && (worst.severity === 'critical' || worst.severity === 'high')
+    ? `Includes a ${worst.severity} probe, ${worst.probeId}. `
+    : '';
+  return `${lead}A probe mapped to these controls could not be decided, so Loxe does not count them as held or failed.`;
 }
 
 function controlGroups(list, state, fwOrder, rep) {
