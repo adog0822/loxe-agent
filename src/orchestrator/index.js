@@ -80,7 +80,7 @@ export class Orchestrator {
   }
 
   // Shared tail of every run: repeat marks, verify chain, sign head, report, notify.
-  async finalize(runId, agent, lib, items, memory, { collection } = {}) {
+  async finalize(runId, agent, lib, items, memory, { collection, coverage } = {}) {
     // Mark findings the org already failed before, so repeat gaps stand out.
     const seenBefore = new Set((memory?.items || []).flatMap((m) => m.probeIds || []));
     for (const it of items) if (it.finding.status === 'fail' && seenBefore.has(it.probe.id)) it.finding.repeat = true;
@@ -90,7 +90,7 @@ export class Orchestrator {
     const signature = await signHead(this.db, {
       agentId: agent.id, runId, head: ledgerStatus.head, length: ledgerStatus.length, libraryHash: lib.hash, ts,
     });
-    const report = buildReportCard({ items, agentId: agent.id, runId, library: lib, ledgerStatus, signature, ts, collection });
+    const report = buildReportCard({ items, agentId: agent.id, runId, library: lib, ledgerStatus, signature, ts, collection, coverage });
 
     await this.db.query(
       `update runs set status = 'completed', grade = $1, report = $2, finished_at = now(), signature = $3 where id = $4`,
@@ -212,7 +212,9 @@ export class Orchestrator {
         const entry = await this.ledger.append(agent.id, evidence, { kind: 'evidence', runId: run.id });
         items.push({ probe, evidence, finding: renderFinding({ probe, evidence, entry, runId: run.id, baseUrl: this.baseUrl }) });
       }
-      return await this.finalize(run.id, agent, lib, items, memory, { collection: 'hand' });
+      const eligible = lib.probes.filter(Orchestrator.handable).length;
+      const coverage = { answered, eligible, unanswered: eligible - answered, outOfScope: lib.probes.length - eligible };
+      return await this.finalize(run.id, agent, lib, items, memory, { collection: 'hand', coverage });
     } catch (err) {
       await this.db.query(`update runs set status = 'failed', error = $1, finished_at = now() where id = $2`, [err.message, run.id]);
       throw err;

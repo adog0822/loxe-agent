@@ -91,7 +91,13 @@ export function renderFinding({ probe, evidence, entry, runId, baseUrl }) {
 }
 
 // ── Report card ──────────────────────────────────────────────────────────────
-export function buildReportCard({ items, agentId, runId, library, ledgerStatus, signature, ts, collection }) {
+// Coverage of a hand test, in one line. A grade from a partial hand test must never travel without it.
+export function coverageLine(cov) {
+  if (!cov) return '';
+  return `${cov.answered} of ${cov.eligible} hand-testable probes answered, ${cov.unanswered} unanswered, ${cov.outOfScope} need the agent's URL and were not run`;
+}
+
+export function buildReportCard({ items, agentId, runId, library, ledgerStatus, signature, ts, collection, coverage }) {
   const t = controlsTable();
   const evidenceList = items.map((i) => ({ ...i.evidence, severity: i.probe.severity }));
   const grade = computeGrade(evidenceList);
@@ -142,6 +148,7 @@ export function buildReportCard({ items, agentId, runId, library, ledgerStatus, 
     signature,
     ...(collection === 'hand' ? {
       collection: 'hand',
+      ...(coverage ? { coverage: { mode: 'hand', ...coverage } } : {}),
       collectionNote: 'The owner sent these test messages to the agent and pasted its replies into Loxe. Loxe judged the replies with the same rules, but did not see the conversation itself. Tests that need direct access to an endpoint were not run.',
     } : {}),
     disclaimer:

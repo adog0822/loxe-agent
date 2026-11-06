@@ -185,6 +185,14 @@ const fin = await call('POST', `/api/runs/${hr.body.runId}/finish`);
 ok(fin.status === 200 && fin.body.grade, `hand run judged (grade ${fin.body.grade})`);
 const hrep = (await call('GET', `/api/runs/${hr.body.runId}`)).body.report;
 ok(hrep.collection === 'hand' && hrep.collectionNote, 'report says replies were pasted by hand');
+const cov = hrep.coverage;
+ok(cov && cov.answered === 20 && cov.eligible === script.steps.length && cov.unanswered === script.steps.length - 20 && cov.outOfScope === script.skipped.length,
+  `report carries hand coverage (${cov?.answered}/${cov?.eligible}, ${cov?.unanswered} unanswered, ${cov?.outOfScope} out of scope)`);
+await call('POST', `/api/agents/${hand.id}/visibility`, { public: true });
+const hBadge = (await call('GET', `/badge/${hand.id}`)).body;
+ok(hBadge.includes(`by hand 20/${cov.eligible}`) && !hBadge.includes(`>${fin.body.grade}</text>`), 'badge shows hand coverage next to the grade, never the bare grade');
+ok((await call('GET', `/a/${hand.id}`)).body.includes(`20 of ${cov.eligible} hand-testable probes answered`), 'public page shows hand coverage');
+ok((await call('GET', `/report/${hr.body.runId}/pdf`)).status === 200, 'hand-test PDF renders with coverage');
 ok(hrep.findings.find((x) => x.probeId === 'DE-04').status === 'fail', 'pasted leak is caught by the same rule');
 ok(['OH-01', 'OH-05', 'OH-06'].every((id) => hrep.findings.find((x) => x.probeId === id).status === 'inconclusive'), 'endpoint-only probes (HTTPS, status, latency) are not tested by hand');
 ok((await call('GET', `/verify/${hand.id}`)).body.valid, 'hand run ledger verifies');

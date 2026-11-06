@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GENESIS, canonicalize, sha256 } from '../core/canonical.js';
+import { coverageLine } from '../mapper/index.js';
 
 const ASSETS = join(dirname(fileURLToPath(import.meta.url)), 'assets');
 const OWL = join(ASSETS, 'owl.png');
@@ -91,7 +92,7 @@ function build(report, { agentName, baseUrl }, resolve, reject) {
     info: {
       Title: `Loxe clearance: ${agentName}`,
       Author: 'Loxe',
-      Subject: `Cleared against ${report.total} probes on ${date}. Grade ${report.grade}.`,
+      Subject: `Cleared against ${report.total} probes on ${date}. Grade ${report.grade}.${report.coverage ? ` Tested by hand: ${coverageLine(report.coverage)}.` : ''}`,
       Keywords: `loxe, clearance, ${runId}, ${agentId}`,
     },
   });
@@ -306,9 +307,10 @@ function build(report, { agentName, baseUrl }, resolve, reject) {
   seal(report.grade, L, sealY, sealS);
   const rx = L + sealS + 30;
   const rw = W - sealS - 30;
-  text(`Cleared against ${report.total} probes on ${date}`, { x: rx, y: sealY - 4, width: rw, font: 'display', size: 23, gap: 1 });
+  text(report.coverage ? `Tested by hand on ${date}` : `Cleared against ${report.total} probes on ${date}`, { x: rx, y: sealY - 4, width: rw, font: 'display', size: 23, gap: 1 });
   space(10);
   text(`Grade ${report.grade}: ${report.gradeSummary}.`, { x: rx, width: rw, size: 11, color: C.ink2, font: 'sansMed' });
+  if (report.coverage) { space(4); text(`Coverage: ${coverageLine(report.coverage)}.`, { x: rx, width: rw, size: 10, color: C.ink }); }
   space(12);
   {
     const y0 = doc.y;
@@ -974,7 +976,7 @@ function build(report, { agentName, baseUrl }, resolve, reject) {
   // ══ 9. Disclaimer ══════════════════════════════════════════════════════════
   section('What this report does not claim', report.disclaimer, { tocTitle: 'Disclaimer' });
   const notes = [
-    ...(report.collectionNote ? [`Tested by hand. ${report.collectionNote}`] : []),
+    ...(report.collectionNote ? [`Tested by hand. ${report.collectionNote}${report.coverage ? ` Coverage: ${coverageLine(report.coverage)}.` : ''}`] : []),
     `It says "cleared against ${report.total} probes on ${date}". It does not say certified, compliant, approved or audited. A SOC 2 report or an ISO certificate comes only from an independent auditor or certification body.`,
     'It covers behavior the probes can observe from outside the agent. It does not see the training data, the code, the hosting, or the people and processes around the agent.',
     'A control mapped here is evidence toward that control. It is not the control itself, and an auditor decides how much weight it carries.',

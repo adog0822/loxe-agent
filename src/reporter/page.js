@@ -1,6 +1,8 @@
 // PUBLIC CLEARANCE PAGE (/a/:agentId) — server-rendered so a buyer clicking a badge gets it fast.
 // Every value from the database or the target agent is escaped: agent names and transcripts are
 // attacker-controlled input.
+import { coverageLine } from '../mapper/index.js';
+
 const esc = (v) =>
   String(v ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
@@ -31,6 +33,7 @@ export function clearancePage({ agent, report, chain, baseUrl, notFound }) {
     <div class="grade g-${esc(agent.current_grade || 'none')}">${esc(agent.current_grade || '–')}</div>
     <h1>${report ? `Cleared against ${report.total} probes on ${esc(date)}` : 'Not cleared yet'}</h1>
     ${report ? `<p class="lede">${esc(report.gradeSummary)}. Frameworks mapped: ${fw}.</p>` : ''}
+    ${report?.coverage ? `<p class="lede"><b>Tested by hand:</b> ${esc(coverageLine(report.coverage))}.</p>` : ''}
   </header>
   ${report ? `
   <section class="proof ${chain.valid ? 'ok' : 'bad'}">

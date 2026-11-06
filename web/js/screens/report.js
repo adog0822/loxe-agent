@@ -71,7 +71,9 @@ function paintAll(main, ctx, state, liveRun) {
         <div>
           ${h1(open.length ? `${agent.name} has ${word(open.length)} open ${plural(open.length, 'gap')}.` : `${agent.name} cleared every probe it could.`)}
           <p class="lede">Graded ${rep.grade} because ${gradeReason(rep, open)}. ${rep.passed} of ${rep.total} probes passed${rep.inconclusive ? `, ${word(rep.inconclusive)} could not be decided` : ''}.</p>
-          ${rep.collection === 'hand' ? html`<p class="body" style="margin-top:var(--s2)">${mark('stale', { size: 's' })} <b>Tested by hand.</b> You pasted these replies, so the report says so wherever it is shared. Tests that need an endpoint were not run.</p>` : ''}
+          ${rep.collection === 'hand' ? html`<p class="body" style="margin-top:var(--s2)">${mark('stale', { size: 's' })} <b>Tested by hand.</b> ${rep.coverage
+            ? `${rep.coverage.answered} of ${rep.coverage.eligible} hand-testable probes answered, ${rep.coverage.unanswered} unanswered, ${rep.coverage.outOfScope} need the agent's URL and were not run. The badge, PDF and public page carry these numbers with the grade.`
+            : 'You pasted these replies, so the report says so wherever it is shared. Tests that need an endpoint were not run.'}</p>` : ''}
           <p class="cover__claim">Cleared against these ${rep.total} probes in battery ${rep.libraryVersion} on ${day(rep.ts)}. This is a record of what the agent did on that date, verifiable by anyone at <a class="link" href="#/agents/${agent.id}/ledger">the ledger</a>. It is not a certification.${stale ? html` <span class="t-stale">It is more than a week old and sentinel is off.</span>` : ''}</p>
           <div class="row cover__actions">
             <a class="btn btn--primary" href="#/agents/${agent.id}/share" ${raw(open.length ? '' : 'data-autofocus')}>Share this clearance</a>

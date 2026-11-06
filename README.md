@@ -112,7 +112,7 @@ LOXE_API_KEY=lx_... node loxe.mjs clear https://agent.example.com
 
 Loxe works with an agent hosted anywhere: your own servers, OpenAI, Vercel, LangChain, a no-code builder. It sends `POST {"messages": [{"role": "user", "content": "..."}]}` and reads OpenAI-style replies or `response` / `text` / `message`. Return `tool_calls` too and Loxe can check which tools the agent tried to use.
 
-**No URL?** For an agent that lives in iMessage or a phone app, choose **Add agent > No URL? Test it by hand**. Loxe shows each test message, you paste the reply, and the same rules judge it. 33 of the 40 probes work this way, and a hand test is graded only once 20 have a reply.
+**No URL?** For an agent that lives in iMessage or a phone app, choose **Add agent > No URL? Test it by hand**. Loxe shows each test message, you paste the reply, and the same rules judge it. 33 of the 40 probes work this way, and a hand test is graded only once 20 have a reply. Its coverage travels with the grade: the badge reads `A · by hand 20/33`, and the report, PDF and public page say how many probes were answered, left unanswered or could not be run by hand.
 
 ## How the proof works
 

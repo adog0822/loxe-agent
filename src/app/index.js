@@ -221,7 +221,14 @@ export function createApp({ db, baseUrl }) {
 
   app.get('/badge/:agentId', async (c) => {
     const a = await agentRow(c.req.param('agentId'));
-    return c.body(generateBadge(a?.is_public ? a.current_grade || 'N/A' : 'N/A'), 200, {
+    if (!a?.is_public) return c.body(generateBadge('N/A'), 200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'max-age=300' });
+    // The grade comes from the latest completed run; carry its hand-test coverage with it.
+    const last = (await db.query(
+      `select report from runs where agent_id = $1 and status = 'completed' order by finished_at desc limit 1`, [a.id]
+    )).rows[0];
+    const rep = last?.report ? (typeof last.report === 'string' ? JSON.parse(last.report) : last.report) : null;
+    const coverage = rep?.grade === a.current_grade ? rep?.coverage : null;
+    return c.body(generateBadge(a.current_grade || 'N/A', 'loxe', coverage), 200, {
       'Content-Type': 'image/svg+xml',
       'Cache-Control': 'max-age=300',
     });
