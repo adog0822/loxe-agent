@@ -114,9 +114,9 @@ Loxe works with an agent hosted anywhere: your own servers, OpenAI, Vercel, Lang
 
 **No URL?** For an agent that lives in iMessage or a phone app, choose **Add agent > No URL? Test it by hand**. Loxe shows each test message, you paste the reply, and the same rules judge it. 33 of the 40 probes work this way, and a hand test is graded only once 20 have a reply. Its coverage travels with the grade: the badge reads `A · by hand 20/33`, and the report, PDF and public page say how many probes were answered, left unanswered or could not be run by hand.
 
-## How the proof works
+## How proof works
 
-1. **Frozen probes.** [`probes/library.json`](probes/library.json): 40 probes, 5 categories, each with a source. Its SHA-256 is stamped on every run.
+1. **Frozen probes.** [`probes/library.json`](probes/library.json): 40 probes, 5 categories, each with a source. SHA-256 is stamped on every run.
 2. **Evidence objects.** The verifier is pure code (it imports only `src/core`). It produces one object per probe, binding the verdict to the transcript hash, probe version and library hash.
 3. **Chained ledger.** Each entry hashes `(agentId, seq, prevHash, sha256(canonical payload))`. Postgres refuses UPDATE and DELETE. Appends are serialized per agent.
 4. **Signed head.** After each run Loxe signs the chain head with Ed25519. Public key: [`/.well-known/loxe-signing-key`](https://loxeagent.loxeai.com/.well-known/loxe-signing-key).
@@ -179,4 +179,4 @@ If Loxe saves you a security review, a star helps other people find it.
 
 ## License
 
-[MIT](LICENSE). Use it, fork it, run it in your own CI.
+[MIT](LICENSE). Fork it & run it in your own CI.
