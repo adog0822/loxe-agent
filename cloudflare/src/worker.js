@@ -25,7 +25,8 @@ export class LoxeContainer extends Container {
   }
 }
 
-const loxe = (env) => getContainer(env.LOXE, 'main');
+// Instance name changes when the container must start with new secrets (a running instance keeps the env it started with).
+const loxe = (env) => getContainer(env.LOXE, 'main-pg');
 
 async function owl(request, env) {
   const ctxReq = new Request(new URL('/api/owl/context', request.url), {
