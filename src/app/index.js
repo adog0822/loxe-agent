@@ -26,6 +26,7 @@ import * as slack from '../integrations/slack.js';
 import { sealJson } from '../db/crypto.js';
 import { demoFetch } from '../../demo/target-agent.js';
 import { buildOwlMessages, askViaRest, OWL_MODEL } from '../guide/index.js';
+import { isAdmin, stats as ownerStats, statsPage, adminGate } from '../admin/index.js';
 
 export function createApp({ db, baseUrl }) {
   const app = new Hono();
@@ -135,6 +136,15 @@ export function createApp({ db, baseUrl }) {
 
   // ── Machine contracts ──────────────────────────────────────────────────────
   app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  // Owner stats: signed-in owners only. Everyone else gets the same 404 as a missing page.
+  app.get('/admin', async (c) => {
+    c.header('Cache-Control', 'no-store');
+    const who = await auth.identify(c);
+    if (!who) return c.html(adminGate('signin'), 401);
+    if (!(await isAdmin(db, who))) return c.html(adminGate('notfound'), 404);
+    return c.html(statsPage(await ownerStats(db)));
+  });
 
   // The CLI is a single dependency-free file, served from this instance (npm's "loxe" is not ours).
   const cliSource = readFileSync(new URL('../../bin/loxe.js', import.meta.url), 'utf8').replace(/^#!.*\n/, '');
@@ -294,6 +304,12 @@ export function createApp({ db, baseUrl }) {
 
   api.use('*', auth.requireAuth);
   const org = (c) => c.get('auth').org.id;
+
+  api.get('/admin/stats', async (c) => {
+    c.header('Cache-Control', 'no-store');
+    if (!(await isAdmin(db, c.get('auth')))) return c.json({ error: 'not found' }, 404);
+    return c.json(await ownerStats(db));
+  });
 
   api.get('/me', (c) => {
     const { user, org: o, via } = c.get('auth');

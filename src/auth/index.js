@@ -35,8 +35,8 @@ export function createAuth(db) {
   async function ensureUser({ userId, email, name, orgId, orgName }) {
     await db.query(`insert into orgs (id, name) values ($1, $2) on conflict (id) do nothing`, [orgId, orgName]);
     await db.query(
-      `insert into users (id, email, name, org_id) values ($1, $2, $3, $4)
-       on conflict (id) do update set email = excluded.email, name = excluded.name, org_id = excluded.org_id`,
+      `insert into users (id, email, name, org_id, last_seen_at) values ($1, $2, $3, $4, now())
+       on conflict (id) do update set email = excluded.email, name = excluded.name, org_id = excluded.org_id, last_seen_at = now()`,
       [userId, email, name || null, orgId]
     );
     const org = (await db.query(`select id, name from orgs where id = $1`, [orgId])).rows[0];
