@@ -19,11 +19,11 @@
 </p>
 
 <p align="center">
-  <a href="https://loxeagent.loxeai.com/app/">Try it</a> ·
+  <a href="https://loxeagent.loxeai.com/app/">Try it</a> -
   <a href="https://loxeagent.loxeai.com/app/?mock=1">Demo, no sign-in</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#how-the-proof-works">How the proof works</a> ·
-  <a href="docs/PROBES.md">The 40 probes</a> ·
+  <a href="#quick-start">Quick start</a> -
+  <a href="#how-the-proof-works">How the proof works</a> -
+  <a href="docs/PROBES.md">The 40 probes</a> -
   <a href="docs/API.md">API</a>
 </p>
 
