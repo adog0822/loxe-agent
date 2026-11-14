@@ -12,6 +12,8 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { id, sha256 } from '../core/canonical.js';
 import { createAuth, authProvider } from '../auth/index.js';
 import { assertProbeable } from '../collector/guard.js';
+import { checkEndpoint } from '../collector/check.js';
+import { WIRE_FORMATS } from '../collector/index.js';
 import { Orchestrator } from '../orchestrator/index.js';
 import { Ledger } from '../ledger/index.js';
 import { signingKey } from '../ledger/signing.js';
@@ -338,9 +340,25 @@ export function createApp({ db, baseUrl }) {
     return c.json(await Promise.all(rows.map(agentView)));
   });
 
+  // Endpoint check: one harmless hello to a URL before it is added. Signed-in only and paced per
+  // org (12 a minute) so it can't be used as a general-purpose fetcher.
+  const checks = new Map();
+  api.post('/agents/check', async (c) => {
+    const now = Date.now();
+    const recent = (checks.get(org(c)) || []).filter((t) => now - t < 60_000);
+    if (recent.length >= 12) return c.json({ error: 'Too many checks in a minute. Give it a few seconds.' }, 429);
+    recent.push(now);
+    checks.set(org(c), recent);
+    if (checks.size > 5000) checks.delete(checks.keys().next().value);
+    const { url, headers } = await c.req.json().catch(() => ({}));
+    if (headers && typeof headers !== 'object') return c.json({ error: 'headers must be an object' }, 400);
+    return c.json(await checkEndpoint({ url, headers: headers || {} }));
+  });
+
   api.post('/agents', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     let { name, url, headers, source = 'url', maritimeAgentId, where } = body;
+    const wire = WIRE_FORMATS.includes(body.wire) ? body.wire : 'messages';
     // An agent with no URL (an app, iMessage): the owner pastes replies by hand.
     if (source === 'hand') {
       if (!name) return c.json({ error: 'name is required' }, 400);
@@ -373,9 +391,9 @@ export function createApp({ db, baseUrl }) {
     if (headers && typeof headers !== 'object') return c.json({ error: 'headers must be an object' }, 400);
     const agentId = id('agent');
     await db.query(
-      `insert into agents (id, name, url, headers, owner_id, org_id, source, maritime_agent_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [agentId, String(name).slice(0, 120), url, await sealJson(db, headers || {}), c.get('auth').user.id, org(c), source, maritimeAgentId || null]
+      `insert into agents (id, name, url, headers, owner_id, org_id, source, maritime_agent_id, wire_format)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [agentId, String(name).slice(0, 120), url, await sealJson(db, headers || {}), c.get('auth').user.id, org(c), source, maritimeAgentId || null, wire]
     );
     return c.json(await agentView(await agentRow(agentId)), 201);
   });

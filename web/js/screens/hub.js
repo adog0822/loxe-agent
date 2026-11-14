@@ -159,8 +159,8 @@ function heroAllClear(agents) {
     <div class="hero">
       <div class="hero__top">${mark('pass')}Everything is cleared</div>
       <div>
-        ${h1('Nothing needs you.')}
-        <p class="lede">Every agent passed its last run or has a decision on record.${next ? ` Sentinel runs the next check ${until(next)}.` : ' Turn on sentinel to re-check them on a schedule.'}</p>
+        ${h1('All quiet.')}
+        <p class="lede">Every agent held up on its last run or has a decision on record. Enjoy it.${next ? ` Sentinel runs the next check ${until(next)}.` : ' Turn on sentinel to re-check them on a schedule.'}</p>
       </div>
       <div class="hero__foot"><a class="btn btn--primary" href="#/add" data-autofocus>Add another agent</a></div>
     </div>`;

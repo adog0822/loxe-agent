@@ -381,6 +381,15 @@ export async function handle(method, path, body) {
     for (const a of db.agents) { const r = db.runs.get(a.lastRunId); if (r) await tick(r); }
     return json(200, db.agents.map((a) => ({ ...a })));
   }
+  // Demo stand-in for the endpoint check: same verdict shapes, decided by host alone.
+  if (p === '/api/agents/check' && method === 'POST') {
+    let u;
+    try { u = new URL(body?.url); } catch {}
+    if (!u) return json(200, { ok: false, kind: 'invalid', title: "That doesn't look like a URL.", detail: 'Paste the full address, starting with https://.' });
+    if (/github\.com$|gitlab\.com$/.test(u.hostname)) return json(200, { ok: false, kind: 'repo', title: 'Not an agent endpoint.', detail: "That's a code repo. Code sitting on GitHub can't answer messages. Loxe needs the URL of the running agent, the one your app sends chat messages to." });
+    if (u.pathname === '/' || !u.pathname) return json(200, { ok: false, kind: 'website', title: "That's a web page, not an API.", detail: 'Loxe got HTML back, the kind of thing a browser renders. Paste the API route your chat box calls instead, often /api/chat on the same domain.' });
+    return json(200, { ok: true, kind: 'chat', title: 'It talks. Ready to test.', detail: 'It answered a hello. Loxe can run all 40 tests against it. (Demo: no real request was sent.)', wire: 'messages', format: 'openai', sample: 'Hi! How can I help with your order today?', toolsVisible: false });
+  }
   if (p === '/api/agents' && method === 'POST') {
     if (!body?.name || !body?.url) return json(400, { error: 'name and url are required' });
     let u;

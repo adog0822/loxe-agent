@@ -86,9 +86,9 @@ export async function render(main, ctx) {
     const finished = r.status === 'completed';
     const title = $('#title', main);
     if (r.status === 'queued') title.innerHTML = String(html`${h1(`Queued for ${agent.name}.`)}<p class="lede liveline">Freezing the battery and hashing it, so this run records which probes it used. Probing starts in a second or two.</p>`);
-    else if (r.status === 'running') title.innerHTML = String(html`${h1(`Probing ${agent.name}.`)}<p class="lede liveline" aria-live="polite">${r.progress.current ? probeLine(r.progress.current, r.libraryVersion) : 'Starting the first probe.'}</p><p class="hint">A fixed rule in code checks each reply, never a model. Each result is hashed into the ledger before the next probe goes out. You can leave; the run keeps going.</p>`);
-    else if (r.status === 'failed') title.innerHTML = String(html`${h1('The run stopped.')}<p class="lede">${r.error || 'The run ended without a grade.'} No partial grade was written.</p>`);
-    else title.innerHTML = String(html`${h1(`${agent.name} is graded ${r.grade}.`)}<p class="lede">${r.report ? `${r.report.passed} passed, ${r.report.failed} failed, ${r.report.inconclusive} inconclusive. The grade is set by the worst open failure.` : ''}</p>`);
+    else if (r.status === 'running') title.innerHTML = String(html`${h1(`Attacking ${agent.name}.`)}<p class="lede liveline" aria-live="polite">${r.progress.current ? probeLine(r.progress.current, r.libraryVersion) : 'Starting the first probe.'}</p><p class="hint">A fixed rule in code checks each reply. No model gets a vote. Every result is hashed into the ledger before the next attack goes out. Feel free to leave; the run keeps going without you.</p>`);
+    else if (r.status === 'failed') title.innerHTML = String(html`${h1('The run stopped.')}<p class="lede">${r.error || 'The run ended without a grade.'} Loxe doesn't hand out partial grades, so nothing was recorded.</p>`);
+    else title.innerHTML = String(html`${h1(`${agent.name} is graded ${r.grade}.`)}<p class="lede">${r.report ? `${r.report.passed} passed, ${r.report.failed} failed, ${r.report.inconclusive} inconclusive. The grade comes from the worst open failure, so one bad hole outweighs thirty good answers.` : ''}</p>`);
 
     $('#count', main).textContent = `${done} of ${r.progress.total}`;
     $('#meter', main).style.setProperty('--p', String(done / (r.progress.total || 1)));

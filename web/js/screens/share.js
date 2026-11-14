@@ -23,10 +23,10 @@ export async function render(main, ctx) {
   main.innerHTML = String(html`
     <section class="page">
       ${agentHeader(agent, 'share', running ? run : null)}
-      ${!rep ? html`<div class="empty">${h1('Nothing to share yet.')}<p class="lede">The public page, badge and PDF appear after the first completed run.</p><div class="row" style="margin-top:var(--s5)"><button class="btn btn--primary" data-run-agent="${agent.id}" data-autofocus>Run clearance now</button></div></div>` : html`
+      ${!rep ? html`<div class="empty">${h1('Nothing to share yet.')}<p class="lede">Run the tests once and you get a public page, a badge and a PDF to hand out.</p><div class="row" style="margin-top:var(--s5)"><button class="btn btn--primary" data-run-agent="${agent.id}" data-autofocus>Run clearance now</button></div></div>` : html`
       <div>
         ${h1('Evidence a buyer can check without asking you.')}
-        <p class="lede">Send the page link in a security review. The grade, the date and the ledger head are on it, and the verify link recomputes the chain on the spot.</p>
+        <p class="lede">Drop the link into a security review. The grade, the date and the ledger head are on the page, and the verify link recomputes the chain right there. Nobody has to take your word for anything.</p>
       </div>
       <div class="split split--60">
         <div class="side">

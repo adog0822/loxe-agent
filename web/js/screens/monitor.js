@@ -28,7 +28,7 @@ export async function render(main, ctx) {
         <div class="side">
           <div>
             ${h1(agent.sentinel.enabled ? 'Sentinel keeps this clearance fresh.' : 'Keep this clearance fresh.')}
-            <p class="lede">Sentinel re-runs the same battery on a schedule and on every Maritime deploy. If the grade drops, Keiki tells the owner.</p>
+            <p class="lede">Sentinel re-runs the same 40 tests on a schedule, so a model update or a careless prompt change can't sneak past you. Connect Slack and you'll hear about it when the grade drops.</p>
           </div>
           ${agent.source === 'hand' ? html`<div class="panel"><p class="body">${mark('off', { size: 's' })} Scheduled re-tests need a URL. ${agent.name} is tested by hand, so start a new hand test when it changes.</p><button class="btn" type="button" data-run-agent="${agent.id}" style="margin-top:var(--s3)">Test again by hand</button></div>` : html`<form class="panel" id="sentinel">
             <label class="switch"><input type="checkbox" id="s-on" ${raw(agent.sentinel.enabled ? 'checked' : '')} data-autofocus> <span id="s-label">${agent.sentinel.enabled ? 'Sentinel is on' : 'Sentinel is off'}</span></label>

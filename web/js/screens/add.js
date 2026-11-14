@@ -1,33 +1,39 @@
-// Add an agent: paste a URL (dominant pane), test one with no URL by hand, or pick a Maritime-hosted agent.
+// Add an agent: paste a chat endpoint (Loxe says hello first and explains what's wrong if it can't
+// talk to it), test one with no URL by hand, or pick a Maritime-hosted agent when that's enabled.
 import { api, isDemo } from '../api.js';
 import { endpointHelp } from '../endpoint-help.js';
-import { html, $, $$, mark, skeleton, toast, h1, esc, sentence } from '../ui.js';
+import { checkCard, checking, checkFailed } from '../endpoint-check.js';
+import { html, $, $$, mark, toast, h1 } from '../ui.js';
 
 export async function render(main, ctx) {
   main.innerHTML = String(html`
     <section class="page">
       <div>
         <a class="crumb" href="#/">All agents</a>
-        <div style="margin-top:var(--s3)">${h1('Add an agent.')}</div>
-        <p class="lede">Loxe attacks the agent with 40 safety tests and grades every reply with code, so the same build always gets the same grade.</p>
+        <div style="margin-top:var(--s3)">${h1('Point Loxe at an agent.')}</div>
+        <p class="lede">Give it the URL your app sends chat messages to. Loxe says hello first, so you know it can actually reach your agent before it throws 40 attacks at it.</p>
       </div>
       <div class="split split--60">
         <form class="panel" id="addform" novalidate>
-          <h2 class="h3">Paste an endpoint</h2>
-          <p class="body" style="margin-bottom:var(--s5)">The address your agent answers chat messages on. Loxe sends it test messages and judges the replies.</p>
+          <h2 class="h3">Paste the chat endpoint</h2>
+          <p class="body" style="margin-bottom:var(--s5)">Not your GitHub repo and not your homepage. The API route your chat box calls, like <code class="mono">/api/chat</code>.</p>
           <div class="field">
             <label class="label" for="f-url">Endpoint URL</label>
-            <input class="input input--mono" id="f-url" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-agent.example.com/chat" required data-autofocus>
+            <div class="urlrow">
+              <input class="input input--mono" id="f-url" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-app.vercel.app/api/chat" required data-autofocus>
+              <button class="btn" type="button" id="checkbtn">Say hello</button>
+            </div>
             <span class="field__error" id="e-url" hidden></span>
-            <span class="field__hint"><a class="link" href="#/security">What Loxe sends and stores</a>. Point it at a staging agent with fake data.</span>
+            <div id="checkout" aria-live="polite"></div>
+            <span class="field__hint"><a class="link" href="#/security">What Loxe sends and stores</a>. A staging copy with fake data is the ideal target.</span>
             ${endpointHelp()}
           </div>
           <div class="field">
             <label class="label" for="f-name">Name</label>
             <input class="input" id="f-name" name="name" autocomplete="off" placeholder="Support Copilot" required>
-            <span class="field__hint">This shows on the public clearance page and the badge.</span>
+            <span class="field__hint">Shows on the public clearance page and the badge.</span>
           </div>
-          <details class="more" style="margin-top:var(--s4)">
+          <details class="more" id="authbox" style="margin-top:var(--s4)">
             <summary>Add an auth header</summary>
             <div class="field" style="margin-top:var(--s2)">
               <label class="label" for="f-hname">Header name</label>
@@ -36,19 +42,20 @@ export async function render(main, ctx) {
             <div class="field">
               <label class="label" for="f-hval">Header value</label>
               <input class="input input--mono" id="f-hval" type="password" autocomplete="off" spellcheck="false" placeholder="Bearer ...">
-              <span class="field__hint">Sent with every probe. Never written to the ledger, the report or the replay, and never returned by the API.</span>
+              <span class="field__hint">Sent with every test. Encrypted at rest, kept out of the ledger and the report, and never shown again.</span>
             </div>
           </details>
           <div class="state state--error" id="formerr" hidden role="alert" style="margin-top:var(--s4)"></div>
           <div class="row" style="margin-top:var(--s5)">
-            <button class="btn btn--primary" type="submit" data-mode="run">Add and run clearance</button>
-            <button class="btn" type="submit" data-mode="add">Add without running</button>
+            <button class="btn btn--primary" type="submit" data-mode="run">Add and run the 40 tests</button>
+            <button class="btn" type="submit" data-mode="add">Just add it</button>
           </div>
+          <p class="small" id="anyway" hidden style="margin-top:var(--s3)">Sure it's right? <button class="linkbtn" type="button" id="anywaybtn">Add it anyway</button> and let the tests sort it out.</p>
         </form>
         <div class="stack">
         <form class="panel" id="handform" aria-labelledby="hand-h" novalidate>
           <h2 class="h3" id="hand-h">No URL? Test it by hand</h2>
-          <p class="body">For an agent you only reach in an app, like one in iMessage. Loxe gives you each test message to send it, and you paste the replies back. About 20 minutes.</p>
+          <p class="body">Custom GPT, Claude project, a bot that lives in iMessage. Loxe hands you each attack, you send it to your agent and paste back what it said. About 20 minutes and a little patience.</p>
           <div class="field" style="margin-top:var(--s4)">
             <label class="label" for="h-name">Agent name</label>
             <input class="input" id="h-name" autocomplete="off" placeholder="Instinct" required>
@@ -60,10 +67,10 @@ export async function render(main, ctx) {
           <div class="state state--error" id="handerr" hidden role="alert"></div>
           <button class="btn" type="submit" style="margin-top:var(--s2)">Start the test</button>
         </form>
-        <aside class="panel" id="maritime" aria-labelledby="mt-h">
+        <aside class="panel" id="maritime" aria-labelledby="mt-h" hidden>
           <h2 class="h3" id="mt-h">Or pick a Maritime agent</h2>
           <p class="body">One click. Loxe reads the URL from Maritime and starts the run.</p>
-          <div id="mt-list" style="margin-top:var(--s4)">${skeleton(3, 'skeleton--tall')}<p class="hint" style="margin-top:var(--s3)">Asking Maritime which agents you host.</p></div>
+          <div id="mt-list" style="margin-top:var(--s4)"></div>
         </aside>
         </div>
       </div>
@@ -72,37 +79,92 @@ export async function render(main, ctx) {
   const form = $('#addform', main);
   if (ctx.query.url) { $('#f-url', form).value = ctx.query.url; $('#f-name', form).value = ctx.query.name || ''; }
   let mode = 'run';
+  let checked = null; // { key, result } for the URL and header last checked
   $$('button[type="submit"]', form).forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; }));
   const urlIn = $('#f-url', form);
   const nameIn = $('#f-name', form);
-  urlIn.addEventListener('input', () => { $('#e-url', form).hidden = true; urlIn.removeAttribute('aria-invalid'); });
-  urlIn.addEventListener('blur', () => {
-    if (!nameIn.value && urlIn.value) {
-      try { const host = new URL(urlIn.value).hostname.split('.')[0]; nameIn.value = host.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()); } catch {}
-    }
-  });
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const err = $('#e-url', form);
-    err.hidden = true;
-    urlIn.removeAttribute('aria-invalid');
-    $('#formerr', form).hidden = true;
-    let u;
-    try { u = new URL(urlIn.value.trim()); } catch {}
-    if (!u || !/^https?:$/.test(u.protocol)) {
-      err.textContent = 'Enter a full URL that starts with https:// or http://.';
-      err.hidden = false;
-      urlIn.setAttribute('aria-invalid', 'true');
-      urlIn.focus();
-      return;
-    }
-    const body = { name: nameIn.value.trim() || u.hostname, url: u.toString(), source: 'url' };
+  const out = $('#checkout', form);
+  const checkBtn = $('#checkbtn', form);
+  const headerPair = () => {
     const hn = $('#f-hname', form).value.trim();
     const hv = $('#f-hval', form).value;
-    if (hn && hv) body.headers = { [hn]: hv };
-    const btn = $(`button[data-mode="${mode}"]`, form);
-    await create(body, mode === 'run', btn, ctx, $('#formerr', form));
+    return hn && hv ? { [hn]: hv } : null;
+  };
+  const key = () => `${urlIn.value.trim()}\n${JSON.stringify(headerPair() || {})}`;
+  const parseUrl = () => {
+    let u;
+    try { u = new URL(urlIn.value.trim()); } catch {}
+    return u && /^https?:$/.test(u.protocol) ? u : null;
+  };
+  const showUrlError = (msg) => {
+    const err = $('#e-url', form);
+    err.textContent = msg;
+    err.hidden = false;
+    urlIn.setAttribute('aria-invalid', 'true');
+    urlIn.focus();
+  };
+
+  function paint(r) {
+    $('#anyway', form).hidden = r.ok;
+    out.innerHTML = String(checkCard(r));
+    if (r.kind === 'auth') $('#authbox', form).open = true;
+  }
+
+  async function runCheck() {
+    $('#e-url', form).hidden = true;
+    urlIn.removeAttribute('aria-invalid');
+    const u = parseUrl();
+    if (!u) { showUrlError('Paste the full address, starting with https://.'); return null; }
+    if (checked && checked.key === key()) return checked.result;
+    checkBtn.classList.add('is-busy'); checkBtn.disabled = true;
+    out.innerHTML = String(checking());
+    try {
+      const h = headerPair();
+      const result = await api.checkEndpoint({ url: u.toString(), ...(h ? { headers: h } : {}) });
+      checked = { key: key(), result };
+      paint(result);
+      return result;
+    } catch (e) {
+      out.innerHTML = String(checkFailed(e.message));
+      return null;
+    } finally {
+      checkBtn.classList.remove('is-busy'); checkBtn.disabled = false;
+    }
+  }
+
+  checkBtn.addEventListener('click', runCheck);
+  urlIn.addEventListener('input', () => {
+    $('#e-url', form).hidden = true;
+    urlIn.removeAttribute('aria-invalid');
+    if (checked && checked.key !== key()) { out.innerHTML = ''; $('#anyway', form).hidden = true; }
   });
+  urlIn.addEventListener('paste', () => setTimeout(() => { if (parseUrl()) runCheck(); }, 0));
+  // The name follows the URL until someone types their own.
+  nameIn.addEventListener('input', () => { delete nameIn.dataset.auto; });
+  urlIn.addEventListener('blur', () => {
+    if ((!nameIn.value || nameIn.dataset.auto) && urlIn.value) {
+      try {
+        const host = new URL(urlIn.value).hostname.split('.')[0];
+        nameIn.value = host.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        nameIn.dataset.auto = '1';
+      } catch {}
+    }
+  });
+
+  async function submit(force) {
+    $('#formerr', form).hidden = true;
+    const u = parseUrl();
+    if (!u) { showUrlError('Paste the full address, starting with https://.'); return; }
+    const r = force ? checked?.result : await runCheck();
+    if (!force && (!r || !r.ok)) { out.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
+    const body = { name: nameIn.value.trim() || u.hostname, url: u.toString(), source: 'url', wire: r?.wire || 'messages' };
+    const h = headerPair();
+    if (h) body.headers = h;
+    const btn = force ? $('#anywaybtn', form) : $(`button[data-mode="${mode}"]`, form);
+    await create(body, force ? true : mode === 'run', btn, ctx, $('#formerr', form));
+  }
+  form.addEventListener('submit', (e) => { e.preventDefault(); submit(false); });
+  $('#anywaybtn', form).addEventListener('click', () => submit(true));
 
   const hand = $('#handform', main);
   if (ctx.query.hand) { hand.scrollIntoView({ block: 'start' }); $('#h-name', hand).focus(); }
@@ -122,26 +184,12 @@ export async function render(main, ctx) {
     } catch (er) { err.textContent = er.message; err.hidden = false; b.classList.remove('is-busy'); b.disabled = false; }
   });
 
-  // Maritime side pane
-  const [ints, list] = await Promise.all([
-    api.integrations().catch(() => null),
-    api.maritimeAgents().catch((e) => ({ error: e })),
-  ]);
-  if (!ctx.alive()) return;
+  // Maritime pane: only shown when this org can actually pick hosted agents from it.
+  const list = await api.maritimeAgents().catch(() => []);
+  if (!ctx.alive() || !Array.isArray(list) || !list.length) return;
+  const pane = $('#maritime', main);
+  pane.hidden = false;
   const box = $('#mt-list', main);
-  const mt = ints?.maritime;
-  if (mt && !mt.configured) {
-    box.innerHTML = String(html`<div class="state"><div class="state__head">${mark('off')}<b>Maritime is not available yet.</b></div><p class="body">Pasting a URL works without it.</p></div>`);
-    return;
-  }
-  if (list.error) {
-    box.innerHTML = String(html`<div class="state state--error"><div class="state__head">${mark('fail')}<b>Maritime did not answer.</b></div><p class="body">${list.error.message}. Pasting a URL still works.</p></div>`);
-    return;
-  }
-  if (!list.length) {
-    box.innerHTML = String(html`<p class="body">Maritime is connected but you host no agents there yet. Deploy one with <code class="mono">maritime create</code> and it shows up here.</p>`);
-    return;
-  }
   const existing = await api.agents().catch(() => []);
   box.innerHTML = String(html`<ul class="pick">${list.map((m) => {
     const already = existing.find((a) => a.maritimeAgentId === m.id || a.url === m.url);
@@ -170,7 +218,7 @@ async function create(body, run, btn, ctx, errBox) {
   } catch (e) {
     btn.classList.remove('is-busy');
     btn.disabled = false;
-    const msg = e.status === 400 ? `The server rejected this endpoint: ${e.message}.` : e.message;
+    const msg = e.status === 400 ? `The server turned this endpoint down: ${e.message}.` : e.message;
     if (errBox) { errBox.hidden = false; errBox.innerHTML = String(html`<div class="state__head">${mark('fail')}<b>Not added.</b></div><p class="body">${msg}</p>`); }
     else toast(msg, 'gap');
   }

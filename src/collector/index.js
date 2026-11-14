@@ -5,6 +5,21 @@
 
 import { fetch as undiciFetch } from 'undici';
 import { guardedDispatcher } from './guard.js';
+import { decodeReply } from './reply.js';
+
+// How chat messages are sent. 'messages' is the OpenAI shape most agents accept; 'ui-messages' is
+// the Vercel AI SDK v5 shape (useChat routes), whose messages carry `parts` instead of `content`.
+export const WIRE_FORMATS = ['messages', 'ui-messages'];
+export function chatBody(messages, wire = 'messages') {
+  if (wire === 'ui-messages') {
+    return {
+      id: 'loxe',
+      messages: messages.map((m, i) => ({ id: `m${i}`, role: m.role, parts: [{ type: 'text', text: m.content }] })),
+      trigger: 'submit-message',
+    };
+  }
+  return { messages };
+}
 
 const DEFAULT_TIMEOUT = 30000;
 const MAX_BODY = 64 * 1024; // replies are judged on at most 64 KB; the rest is dropped unread
@@ -31,10 +46,11 @@ async function readCapped(res, max = MAX_BODY) {
 }
 
 export class Collector {
-  constructor({ targetUrl, headers = {}, timeout = DEFAULT_TIMEOUT }) {
+  constructor({ targetUrl, headers = {}, timeout = DEFAULT_TIMEOUT, wire = 'messages' }) {
     this.targetUrl = targetUrl.replace(/\/$/, '');
-    this.headers = { 'Content-Type': 'application/json', ...headers };
+    this.headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream;q=0.9, */*;q=0.5', ...headers };
     this.timeout = timeout;
+    this.wire = WIRE_FORMATS.includes(wire) ? wire : 'messages';
   }
 
   // ── turns: multi-turn conversation ───────────────────────────────────────
@@ -48,32 +64,21 @@ export class Collector {
         const res = await guardedFetch(this.targetUrl, {
           method: 'POST',
           headers: this.headers,
-          body: JSON.stringify({ messages }),
+          body: JSON.stringify(chatBody(messages, this.wire)),
           signal: AbortSignal.timeout(this.timeout),
         });
-        const latencyMs = Date.now() - start;
+        const latencyMs = Date.now() - start; // time to first response, as before streaming support
         const body = await readCapped(res);
-        let parsed;
-        try {
-          parsed = JSON.parse(body);
-        } catch {
-          parsed = null;
-        }
-        const text =
-          parsed?.choices?.[0]?.message?.content ??
-          parsed?.response ??
-          parsed?.text ??
-          parsed?.message ??
-          body;
-        const tool_calls = parsed?.choices?.[0]?.message?.tool_calls ?? parsed?.tool_calls ?? undefined;
+        const { text, tool_calls, format } = decodeReply(body, res.headers.get('content-type'));
         turns.push({
-          text: String(text),
+          text,
           status: res.status,
           httpStatus: res.status,
           latencyMs,
+          replyFormat: format,
           ...(tool_calls ? { tool_calls } : {}),
         });
-        messages.push({ role: 'assistant', content: String(text) });
+        messages.push({ role: 'assistant', content: text });
       } catch (err) {
         turns.push({
           text: '',
@@ -126,7 +131,7 @@ export class Collector {
             const res = await guardedFetch(this.targetUrl, {
               method: 'POST',
               headers: this.headers,
-              body: JSON.stringify({ messages: [{ role: 'user', content: burst.message }] }),
+              body: JSON.stringify(chatBody([{ role: 'user', content: burst.message }], this.wire)),
               signal: AbortSignal.timeout(this.timeout),
             });
             const latencyMs = Date.now() - start;

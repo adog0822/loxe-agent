@@ -14,7 +14,7 @@ export async function render(main, ctx) {
 
   const QUESTIONS = [
     {
-      ask: `${name ? `Hi ${name}. ` : 'Hi. '}I am the Loxe owl. Three quick questions and I will set things up around your answers.`,
+      ask: `${name ? `Hi ${name}. ` : 'Hi. '}I'm the Loxe owl. Three quick questions and I'll set things up around your answers.`,
       askMore: true,
       q: 'Where does your agent live?',
       hint: 'Pick the closest. You can connect from anywhere later.',
@@ -24,14 +24,14 @@ export async function render(main, ctx) {
     {
       ask: 'Which frameworks do your buyers ask about?',
       q: 'Which frameworks matter to you?',
-      hint: 'Pick any. I will list these first in every report. All four are always mapped.',
+      hint: 'Pick any. I\'ll list these first in every report. All four get mapped either way.',
       body: () => html`<div class="choices choices--2" role="group" aria-label="Frameworks">${FRAMEWORKS.map(([k, l]) => choice('fw', k, l, '', a.frameworks.includes(k), 'checkbox'))}</div>`,
       ok: () => true,
     },
     {
       ask: 'Last one. When a grade drops, how should I tell you?',
       q: 'How do you want alerts?',
-      hint: 'Alerts go through Keiki. You can change this on any agent.',
+      hint: 'Slack works today. The other channels light up as we switch them on, and you can change this per agent.',
       body: () => html`<div class="choices choices--2" role="radiogroup" aria-label="Alerts">${ALERTS.map(([k, l]) => choice('alerts', k, l, '', a.alerts === k, 'radio'))}</div>`,
       ok: () => !!a.alerts,
     },
@@ -71,7 +71,7 @@ export async function render(main, ctx) {
     if (ctx.query.again === '1') { toast('Answers updated.'); ctx.go('#/'); return; }
     main.innerHTML = String(html`
       <section class="page welcome">
-        <div class="speech">${owlImg(56, 'The Loxe owl')}<p class="speech__line">Done. Now the part that matters: test your first agent. It takes about a minute.</p></div>
+        <div class="speech">${owlImg(56, 'The Loxe owl')}<p class="speech__line">Done. Now the fun part: point me at your first agent. It takes about a minute, and I'll say hello before I start swinging.</p></div>
         ${firstAgentForm(a)}
         <p class="hint">Rather look around first? <a class="link" href="#/">Go to your workspace</a> or switch on <b>Demo</b> in the top bar for a guided tour with sample data.</p>
       </section>`);

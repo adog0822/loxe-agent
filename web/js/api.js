@@ -72,6 +72,7 @@ export const api = {
   agents: () => request('GET', '/api/agents'),
   agent: (id) => request('GET', `/api/agents/${id}`),
   createAgent: (body) => request('POST', '/api/agents', body),
+  checkEndpoint: (body) => request('POST', '/api/agents/check', body),
   deleteAgent: (id) => request('DELETE', `/api/agents/${id}`),
   startRun: (id) => request('POST', `/api/agents/${id}/runs`),
   runs: (id) => request('GET', `/api/agents/${id}/runs`),

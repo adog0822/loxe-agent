@@ -9,7 +9,7 @@ export async function render(main, ctx) {
   if (session.user) { ctx.go(next); return; }
 
   if (session.provider === 'clerk' && session.clerk) {
-    main.innerHTML = String(html`<section class="page signin">${h1('Sign in to Loxe.')}<p class="lede">Your agents, their runs and the ledger are scoped to your organisation.</p><div id="clerk" style="margin-top:var(--s5)"></div><div class="speech" style="margin-top:var(--s6)">${owlImg(40)}<p class="speech__line">Not ready to sign in? <button class="linkbtn" type="button" id="demo-go">Take the guided demo</button> with sample agents.</p></div></section>`);
+    main.innerHTML = String(html`<section class="page signin">${h1('Sign in. Then go break something.')}<p class="lede">On purpose, safely, with receipts. Your agents, runs and ledger stay private to your organisation.</p><div id="clerk" style="margin-top:var(--s5)"></div><div class="speech" style="margin-top:var(--s6)">${owlImg(40)}<p class="speech__line">Just looking? <button class="linkbtn" type="button" id="demo-go">Take the guided demo</button> with sample agents. No sign-up.</p></div></section>`);
     $('#demo-go', main)?.addEventListener('click', () => enterDemo());
     session.clerk.mountSignIn($('#clerk', main), { afterSignInUrl: location.pathname + location.search + next, signUpUrl: undefined });
     ctx.onLeave(() => { try { session.clerk.unmountSignIn($('#clerk')); } catch {} });

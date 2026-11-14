@@ -4,22 +4,23 @@ import { GENESIS, entryHash, hashObject } from '../canonical.js';
 import { setContext } from '../owl.js';
 
 const ROWS = [
-  ['Ends in a PDF that is stale after the next deploy.', 'Re-tests on every deploy and on a schedule, and tells you when the grade moves.'],
-  ['The evidence is the tester\'s word.', 'The evidence is hashed, chained and signed. Anyone can re-run it and get the same verdict.'],
-  ['Written for engineers.', 'Every finding is written three ways: plain English for the buyer, the fix for the engineer, the control for the auditor.'],
-  ['Says what broke.', 'Maps every result to SOC 2, ISO 42001, NIST AI RMF and OWASP LLM Top 10, so it drops into an audit.'],
+  ['Weeks to book and thousands of dollars.', 'About a minute. Free.'],
+  ['A PDF that goes stale the next time you ship.', 'Re-run it on every release, or let it re-check on a schedule. You hear about it when the grade moves.'],
+  ["The evidence is the tester's word.", 'Every result is hashed, chained and signed. Anyone can re-run the tests and get the same verdict.'],
+  ['Written for engineers.', 'Each finding comes three ways: plain English for the buyer, the fix for your engineer, the control ID for the auditor.'],
+  ['Says what broke.', 'Maps every result to SOC 2, ISO 42001, NIST AI RMF and OWASP LLM Top 10, so it drops straight into an audit.'],
 ];
 const WHO = [
-  ['Agent vendors', 'Send a clearance page with the first email instead of a 200-row security questionnaire.'],
-  ['Buyers and security leads', 'Get a yes or no with evidence, in minutes, for any agent a vendor sends you.'],
-  ['Engineers', 'See the input that broke the agent, why it matters, and the patch.'],
-  ['Auditors and vCISOs', 'Cite control-mapped, hashed evidence in a workpaper.'],
-  ['Agent platforms', 'Show a clearance badge on every agent deployed on you.'],
+  ['Agent vendors', 'Send a clearance link with your first email and skip most of the 200-row security questionnaire.'],
+  ['Buyers and security leads', "A vendor swears their agent is safe? Check it yourself in a minute, with evidence you can forward."],
+  ['Engineers', 'See the exact message that broke your agent, why it matters, and the patch.'],
+  ['Auditors and vCISOs', "Cite hashed, control-mapped evidence in a workpaper without taking anyone's word for it."],
+  ['Agent platforms', 'Put a clearance badge on every agent that ships on your platform.'],
 ];
 const STEPS = [
-  '40 frozen tests across data exposure, tool permissions, prompt injection, harmful actions and hygiene.',
-  'Code decides pass or fail. A model never does.',
-  'Each result is SHA-256 hashed and chained to the one before, so changing any entry breaks every entry after it.',
+  '40 fixed attacks: leaking data, abusing tools, prompt injection, harmful actions and basic hygiene.',
+  'Plain code decides pass or fail. No model grades another model.',
+  'Every result is SHA-256 hashed and chained to the one before, so editing one entry breaks every entry after it.',
   'The chain head is signed with Ed25519. Paste any hash from a report and check it yourself.',
 ];
 
@@ -30,9 +31,9 @@ export async function render(main, ctx) {
   main.innerHTML = String(html`
     <article class="why">
       <header class="why__hero">
-        <h1 class="h1 h1--sans why__h1">Proof your AI agent is safe to let in.</h1>
-        <p class="why__line">Loxe tests any AI agent, grades it A to F, and records every result in a ledger nobody can quietly edit. Not even us.</p>
-        <p class="body why__where">Your agent can run anywhere: your own servers, OpenAI, Vercel, LangChain, a no-code builder. If it answers chat at a URL, Loxe can test it.</p>
+        <h1 class="h1 h1--sans why__h1">Your AI agent says it's safe. Make it prove it.</h1>
+        <p class="why__line">Loxe throws 40 attacks at your agent, grades it A to F, and writes every result into a ledger nobody can quietly edit. Including us.</p>
+        <p class="body why__where">OpenAI, Claude, LangChain, Vercel, something you duct-taped together last weekend. If it answers chat messages at a URL, Loxe can test it. If it doesn't, you can test it by hand.</p>
         <div class="row row--l why__cta">
           <a class="btn btn--primary btn--l" href="${signedIn ? '#/add' : '#/signin?next=%23%2Fadd'}" data-autofocus>Test my agent</a>
           <button class="btn btn--l" type="button" data-why="demo">Watch the demo</button>
@@ -40,12 +41,12 @@ export async function render(main, ctx) {
       </header>
 
       <section class="why__sec">
-        <h2 class="h2">This is not a pen test.</h2>
+        <h2 class="h2">Why not just get a pen test?</h2>
         <div class="vs" role="table" aria-label="A pen test compared with Loxe">
           <div class="vs__row vs__head" role="row"><span role="columnheader">A pen test</span><span role="columnheader">Loxe</span></div>
           ${ROWS.map(([a, b]) => html`<div class="vs__row" role="row"><span class="vs__them" role="cell">${a}</span><span class="vs__us" role="cell">${b}</span></div>`)}
         </div>
-        <p class="why__close">A pen test finds holes once. Loxe is the running record of what your agent is allowed to do and what it did under pressure.</p>
+        <p class="why__close">Get one if a customer asks for it. A pen test finds holes once, though. Loxe keeps a running record of what your agent did every time someone leaned on it.</p>
       </section>
 
       <section class="why__sec">
@@ -57,7 +58,7 @@ export async function render(main, ctx) {
 
       <section class="why__sec why__proof">
         <div>
-          <h2 class="h2">How the proof works</h2>
+          <h2 class="h2">How the proof works (no blockchain, promise)</h2>
           <ol class="steps">${STEPS.map((s, i) => html`<li><span class="steps__n">${i + 1}</span><span>${s}</span></li>`)}</ol>
           <div class="row row--l" style="margin-top:var(--s5)"><button class="linkbtn" type="button" data-why="ledger">Verify a real ledger</button><a class="link" href="#/security">How we handle your data</a></div>
         </div>
@@ -77,8 +78,8 @@ export async function render(main, ctx) {
       </section>
 
       <section class="why__end">
-        <h2 class="h1 h1--sans why__h1">Trust in an agent becomes portable.</h2>
-        <p class="why__line">Clear an agent once. The proof follows it to the next buyer, the next audit and the next platform.</p>
+        <h2 class="h1 h1--sans why__h1">A grade that travels with your agent.</h2>
+        <p class="why__line">Test it once and the proof goes with it, to the next buyer and the next audit. When you ship a fix, run it again and watch the letter change.</p>
         <a class="btn btn--primary btn--l" href="${signedIn ? '#/add' : '#/signin?next=%23%2Fadd'}">Test my agent</a>
       </section>
     </article>`);
