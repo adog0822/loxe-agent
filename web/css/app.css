@@ -733,3 +733,11 @@ body.owl-open .main { margin-right: min(420px, 100vw); }
 .probe__said .small { display: block; font-family: var(--sans); color: var(--ink-3); margin-bottom: 2px; }
 .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 @media (max-width: 520px) { .urlrow { flex-direction: column; } }
+
+/* ---------- report: fix prompt for a coding agent ---------- */
+.fixkit { margin-top: var(--s4); border: var(--hair) solid var(--line-strong, var(--line)); border-radius: var(--r-lg); padding: var(--s4) var(--s5); background: var(--surface); display: grid; gap: var(--s3); }
+.fixkit .body { margin-top: var(--s1); max-width: 64ch; }
+.fixkit__row { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.fixkit__sel { width: auto; min-width: 12rem; flex: 0 1 auto; }
+.fixkit__pre { max-height: 360px; overflow: auto; white-space: pre-wrap; font-size: 12px; margin: 0; }
+@media (max-width: 560px) { .fixkit__sel, .fixkit__row .btn { width: 100%; } }

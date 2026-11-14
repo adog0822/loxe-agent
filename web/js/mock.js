@@ -381,6 +381,10 @@ export async function handle(method, path, body) {
     for (const a of db.agents) { const r = db.runs.get(a.lastRunId); if (r) await tick(r); }
     return json(200, db.agents.map((a) => ({ ...a })));
   }
+  // Demo stand-in for the fix prompt: the real one is built server-side from stored transcripts.
+  if ((m = p.match(/^\/api\/runs\/([^/]+)\/fix-prompt$/)) && method === 'GET') {
+    return json(200, { tool: 'claude-code', count: 1, text: 'I need you to fix a security problem in my AI agent.\n\n(Demo: sign in and run a real test to get the full prompt, with the exact attack, your agent\'s reply, the fix, and the questions only you should answer.)' });
+  }
   // Demo stand-in for the endpoint check: same verdict shapes, decided by host alone.
   if (p === '/api/agents/check' && method === 'POST') {
     let u;

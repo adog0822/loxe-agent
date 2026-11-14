@@ -73,6 +73,7 @@ export const api = {
   agent: (id) => request('GET', `/api/agents/${id}`),
   createAgent: (body) => request('POST', '/api/agents', body),
   checkEndpoint: (body) => request('POST', '/api/agents/check', body),
+  fixPrompt: (runId, tool, probe) => request('GET', `/api/runs/${encodeURIComponent(runId)}/fix-prompt?tool=${encodeURIComponent(tool || 'claude-code')}${probe ? `&probe=${encodeURIComponent(probe)}` : ''}`),
   deleteAgent: (id) => request('DELETE', `/api/agents/${id}`),
   startRun: (id) => request('POST', `/api/agents/${id}/runs`),
   runs: (id) => request('GET', `/api/agents/${id}/runs`),

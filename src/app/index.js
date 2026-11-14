@@ -14,6 +14,7 @@ import { createAuth, authProvider } from '../auth/index.js';
 import { assertProbeable } from '../collector/guard.js';
 import { checkEndpoint } from '../collector/check.js';
 import { WIRE_FORMATS } from '../collector/index.js';
+import { buildFixPrompt, TOOLS as FIX_TOOLS } from '../fix/prompt.js';
 import { Orchestrator } from '../orchestrator/index.js';
 import { Ledger } from '../ledger/index.js';
 import { signingKey } from '../ledger/signing.js';
@@ -500,6 +501,22 @@ export function createApp({ db, baseUrl }) {
       runId: r.id,
       transcripts: rows.map((x) => ({ ...x, request_body: JSON.parse(x.request_body || 'null'), response_body: JSON.parse(x.response_body || 'null') })),
     });
+  });
+
+  // Fix prompt: the run's open failures as one prompt for the user's coding agent. Org-only, because
+  // it quotes the stored transcripts. ?tool=claude-code|cursor|codex|chat, ?probe=ID (repeatable).
+  api.get('/runs/:id/fix-prompt', async (c) => {
+    const r = (await db.query(`select * from runs where id = $1 and org_id = $2`, [c.req.param('id'), org(c)])).rows[0];
+    if (!r) return c.json({ error: 'not found' }, 404);
+    const run = await withDecisions(runView(r));
+    if (!run.report) return c.json({ error: 'this run has no report yet' }, 409);
+    const agent = await agentRow(r.agent_id, org(c));
+    const rows = (await db.query(`select probe_id, request_body, response_body from vendor_requests where run_id = $1`, [r.id])).rows
+      .map((x) => ({ probe_id: x.probe_id, request_body: JSON.parse(x.request_body || 'null'), response_body: JSON.parse(x.response_body || 'null') }));
+    const tool = FIX_TOOLS[c.req.query('tool')] ? c.req.query('tool') : 'claude-code';
+    const probeIds = c.req.queries('probe') || null;
+    const out = buildFixPrompt({ agent, report: run.report, transcripts: rows, tool, probeIds, reportUrl: `${baseUrl}/app/#/agents/${r.agent_id}/report` });
+    return c.json({ ...out, tools: Object.fromEntries(Object.entries(FIX_TOOLS).map(([k, v]) => [k, v.label])) });
   });
 
   // Hand-collected runs: the script, one reply at a time, then judge.

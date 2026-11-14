@@ -92,7 +92,8 @@ function paintAll(main, ctx, state, liveRun) {
             </div>
             <div class="readas"><span class="small" id="readas-l">Read as</span>${segmented('global', readAs, 'readas-l')}</div>
           </div>
-          ${fails.length ? html`<ol class="findings" style="margin-top:var(--s4)">${fails.map((f) => findingItem(f))}</ol>` : ''}
+          ${open.length ? fixKit(rep.runId, open.length) : ''}
+          ${fails.length ? html`<ol class="findings" style="margin-top:var(--s4)">${fails.map((f) => findingItem(f, rep.runId))}</ol>` : ''}
           ${inconclusive.length ? html`
             <h3 class="h3" style="margin-top:var(--s6)">Could not decide</h3>
             <p class="body">Loxe marks a probe inconclusive instead of guessing. These count as neither pass nor fail.</p>
@@ -186,6 +187,7 @@ function paintAll(main, ctx, state, liveRun) {
 }
 
 function bind(main, ctx, state, liveRun) {
+  bindFixKit(main);
   $$('.finding__row', main).forEach((b) => b.addEventListener('click', () => toggle(b.closest('.finding'))));
   $$('.seg[data-seg] button', main).forEach((b) => b.addEventListener('click', () => {
     const seg = b.closest('.seg');
@@ -271,7 +273,7 @@ function segmented(kind, value, labelledby) {
   return html`<span class="seg" data-seg="${kind}" role="group" ${raw(labelledby ? `aria-labelledby="${labelledby}"` : 'aria-label="Read this finding as"')}>${LANGS.map(([k, l]) => html`<button type="button" data-v="${k}" aria-pressed="${k === value}">${l}</button>`)}</span>`;
 }
 
-function findingItem(f) {
+function findingItem(f, runId = null) {
   const st = findingState(f);
   const e = f.engineer || {};
   const a = f.auditor || {};
@@ -291,12 +293,13 @@ function findingItem(f) {
       <div class="langpane" data-lang="plain" ${raw(readAs === 'plain' ? '' : 'hidden')}>
         ${a.controls?.[0] ? html`<h4>Why a buyer cares</h4><p>${a.controls[0].plain}</p>` : ''}
         ${e.remediation ? html`<h4>What to do</h4><p>${e.remediation.summary}</p>` : ''}
+        ${f.status === 'fail' && runId ? html`<button class="btn btn--s" type="button" data-fixprompt="${f.probeId}" data-run="${runId}" style="margin-top:var(--s3)">Copy a fix prompt for your coding agent</button>` : ''}
       </div>
 
       <div class="langpane" data-lang="engineer" ${raw(readAs === 'engineer' ? '' : 'hidden')}>
         <h4>Rule result</h4><pre class="raw">${e.reason || ''}</pre>
         ${e.detail ? html`<h4>Detail</h4><pre class="raw">${e.detail}</pre>` : ''}
-        ${e.remediation ? html`<h4>Fix</h4><p>${e.remediation.summary}</p>${e.remediation.patch ? html`<pre class="raw">${e.remediation.patch}</pre><button class="btn btn--s btn--quiet" data-copy="${e.remediation.patch}" data-copy-label="Patch copied">Copy patch</button>` : ''}` : ''}
+        ${e.remediation ? html`<h4>Fix</h4><p>${e.remediation.summary}</p>${e.remediation.patch ? html`<pre class="raw">${e.remediation.patch}</pre><button class="btn btn--s btn--quiet" data-copy="${e.remediation.patch}" data-copy-label="Patch copied">Copy patch</button>` : ''}${f.status === 'fail' && runId ? html`<button class="btn btn--s btn--quiet" type="button" data-fixprompt="${f.probeId}" data-run="${runId}">Copy fix prompt</button>` : ''}` : ''}
         <h4>Replay this probe</h4>
         <p>Send the same probe again now and compare. Use it to confirm a fix before the next full run.</p>
         <div class="row" style="margin-top:var(--s2)"><button class="btn btn--s" type="button" data-replay="${f.probeId}">Replay ${f.probeId} now</button>${e.replay ? html`<button class="btn btn--s btn--quiet" data-copy="${e.replay}" data-copy-label="Replay command copied">Copy replay command</button>` : ''}</div>
@@ -385,3 +388,60 @@ function gradeReason(rep, open) {
 
 const bySeverity = (a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity] || a.probeId.localeCompare(b.probeId);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// ── Fix prompt for the user's coding agent ───────────────────────────────────
+const FIX_TOOLS = [['claude-code', 'Claude Code'], ['cursor', 'Cursor'], ['codex', 'Codex'], ['chat', 'ChatGPT, Claude or another chat']];
+const fixTool = () => { try { return localStorage.getItem('loxe-fixtool') || 'claude-code'; } catch { return 'claude-code'; } };
+
+function fixKit(runId, n) {
+  const t = fixTool();
+  return html`<div class="fixkit">
+    <div>
+      <h3 class="h3">Hand the fixes to your coding agent</h3>
+      <p class="body">One prompt with every open gap: the exact attack, what your agent said, and the fix. Your agent does the busywork. Anything that's really a business call, like who's allowed to issue refunds, it has to ask you first.</p>
+    </div>
+    <div class="fixkit__row">
+      <label class="small" for="fx-tool">I use</label>
+      <select class="input fixkit__sel" id="fx-tool">${FIX_TOOLS.map(([k, l]) => html`<option value="${k}" ${raw(k === t ? 'selected' : '')}>${l}</option>`)}</select>
+      <button class="btn btn--primary" type="button" data-fixprompt="" data-run="${runId}">Copy the prompt for all ${n} ${plural(n, 'gap')}</button>
+      <button class="btn btn--quiet" type="button" id="fx-peek" data-run="${runId}">Preview</button>
+    </div>
+    <pre class="raw fixkit__pre" id="fx-pre" hidden></pre>
+  </div>`;
+}
+
+function bindFixKit(main) {
+  const sel = $('#fx-tool', main);
+  const pre = $('#fx-pre', main);
+  const peek = $('#fx-peek', main);
+  async function showPreview() {
+    peek.classList.add('is-busy');
+    try {
+      const p = await api.fixPrompt(peek.dataset.run, fixTool(), null);
+      pre.textContent = p.text;
+      pre.hidden = false;
+      peek.textContent = 'Hide preview';
+    } catch (er) { toast(er.message, 'gap'); } finally { peek.classList.remove('is-busy'); }
+  }
+  sel?.addEventListener('change', () => {
+    try { localStorage.setItem('loxe-fixtool', sel.value); } catch {}
+    if (pre && !pre.hidden) showPreview();
+  });
+  peek?.addEventListener('click', () => {
+    if (!pre.hidden) { pre.hidden = true; peek.textContent = 'Preview'; return; }
+    showPreview();
+  });
+  $$('[data-fixprompt]', main).forEach((b) => b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    b.classList.add('is-busy'); b.disabled = true;
+    try {
+      const p = await api.fixPrompt(b.dataset.run, fixTool(), b.dataset.fixprompt || null);
+      if (!p.text) { toast('Nothing open to fix here.'); return; }
+      await navigator.clipboard.writeText(p.text);
+      const where = FIX_TOOLS.find(([k]) => k === p.tool)?.[1] || 'your coding agent';
+      toast(`Copied. Paste it into ${p.tool === 'chat' ? 'your chat' : where}, then re-run Loxe when it's done.`);
+    } catch (er) {
+      toast(er.message || 'Could not copy the prompt.', 'gap');
+    } finally { b.classList.remove('is-busy'); b.disabled = false; }
+  }));
+}

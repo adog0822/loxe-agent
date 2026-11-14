@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node test/verifier.test.js && node test/reply.test.js && node test/check.test.js && node test/e2e.test.js && node test/admin.test.js && node test/demo-outcomes.test.js",
+    "test": "node test/verifier.test.js && node test/reply.test.js && node test/check.test.js && node test/e2e.test.js && node test/admin.test.js && node test/fix-prompt.test.js && node test/demo-outcomes.test.js",
     "demo": "node demo/target-agent.js",
     "deploy:maritime": "node scripts/deploy-maritime.js"
   },
